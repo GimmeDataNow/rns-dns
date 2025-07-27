@@ -16,3 +16,13 @@ rand_chacha = "0.3"
 rand_core = "0.6"
 # rand_core = { version = "0.6.4", features = ["getrandom"] }
 reticulum = { git = "https://github.com/BeechatNetworkSystemsLtd/Reticulum-rs", rev = "f1f1668d1eca6a2adc98aea4ac0fd1a499429e2e"}
+
+
+[[example]]
+name = "hello-server"
+path = "src/echo_server.rs"
+
+[[example]]
+name = "hello-client"
+path = "src/hello_client.rs"
+

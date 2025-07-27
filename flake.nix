@@ -34,6 +34,11 @@
               protobuf
               rns           
             ];
+            shellHook = ''
+              # 🔄 Replace './tmux.conf' with the path to your configuration file
+              # source ~/.bashrc
+              # exec ./tmux.sh
+            '';
 
             # nativeBuildInputs = with pkgs;
               # lib.optionals stdenv.isLinux [ xorg.libX11.dev ]
