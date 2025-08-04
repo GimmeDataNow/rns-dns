@@ -32,6 +32,8 @@ pub enum LoggingLevel {
 #[allow(unreachable_patterns)]
 pub fn logging_function(lvl: LoggingLevel, str: &str) {
     let time = chrono::offset::Local::now().to_string();
+    let now = chrono::Local::now();
+    let time = now.format("%Y-%m-%d %H:%M:%S %:z");
     let logging_level = match lvl {
         LoggingLevel::Trace => "TRACE".purple(),
         LoggingLevel::Info => "INFO ".blue(),

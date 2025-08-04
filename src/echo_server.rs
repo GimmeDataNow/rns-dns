@@ -74,12 +74,12 @@ async fn main() {
     // We'll spawn a separate async task for this
     {
         let transport = transport.clone();
-        let destination = destination.clone();
-                        transport
-                    .lock()
-                    .await
-                    .send_announce(&destination, Some(b"Hello Server"))
-                    .await;
+        // let destination = destination.clone();
+                        // transport
+                    // .lock()
+                    // .await
+                    // .send_announce(&destination, Some(b"Hello Server"))
+                    // .await;
 
         tokio::spawn(async move {
             loop {
@@ -87,7 +87,7 @@ async fn main() {
                 transport
                     .lock()
                     .await
-                    .send_announce(&destination, Some(b"Hello Server"))
+                    .send_announce(&destination, Some(b"hello.server"))
                     .await;
                 // Announce every 5 minutes
                 tokio::time::sleep(Duration::from_secs(15)).await;

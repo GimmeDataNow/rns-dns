@@ -52,7 +52,11 @@ async fn main() {
             if let Ok(announce) = announce_receiver.recv().await {
                 let dest = announce.destination.lock().await;
                 // Check if the announced destination has the name we're looking for.
-                if dest.desc.name.hash == server_dest_name.hash {
+                self::info!("Announce info is: {:?}", dest.desc.address_hash);
+                self::info!("dest.desc.name.hash: {:?}", dest.desc.name.hash);
+                self::info!("server_dest_name.hash: {:?}", server_dest_name.hash);
+                // this is the culprit
+                // if dest.desc.name.hash == server_dest_name.hash {
                     self::info!(
                         "Discovered server destination: {}",
                         dest.desc.address_hash
@@ -62,11 +66,13 @@ async fn main() {
                     let link = transport.lock().await.link(dest.desc).await;
                     server_link = Some(link);
                     break;
-                }
+                // }
             }
         }
     })
     .await;
+
+    self::info!("server_link = {:?}", server_link.is_some());
 
     if discovery_timeout.is_err() || server_link.is_none() {
         self::error!("Failed to discover the server within 30 seconds. Is the server running?");
@@ -80,6 +86,8 @@ async fn main() {
     self::info!("Waiting for link to become active...");
     let link_activation_timeout = time::timeout(Duration::from_secs(10), async {
         loop {
+            let a = link.lock().await.status();
+            self::info!("link status = {:?}", a);
             // First, check the link status directly.
             if link.lock().await.status() == LinkStatus::Active {
                 break;

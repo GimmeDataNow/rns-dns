@@ -63,5 +63,5 @@ respond with error codes
 0x03	🕒 Expired (record known, but expired)
 0x04	🧾 Invalid signature
 0x05	🚫 Verification required (name exists but not trusted)
-0x06	🧍 Identity mismatch (wrong owner tried to update)
+0x06	🧍 Identity mismatch (wrong owner tried to update) // unlikely error. might reduce the index
 0x07	🧱 System error or overload
