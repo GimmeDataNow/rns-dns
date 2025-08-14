@@ -160,20 +160,207 @@ pub enum RNSDNSERRORS {
     AlreadyExists
 }
 
+/// This is the DnsDatabase.
+/// 
+/// # Fields
+/// `name` - The name is simply the human readable domain name.
+///
+/// # Reasoning
+///
+///
+/// # Security
+///
+#[derive(Default)]
+pub struct DnsEntryStore {
+    entries: HashMap<String, DnsEntry>,
+    reverse_index: HashMap<AddressHash, Vec<String>>,
+}
+
+impl DnsEntryStore {
+
+    /// Adds an entry to the `DnsEntryStore`.
+    ///
+    /// # Behaviour
+    ///
+    /// THIS FUNCTION DOES NOT UPDATE THE REVERSE INDEX.
+    ///
+    /// It will default for all values that were not specified such as `timestamp`, `expiry`, `verifications`.
+    /// Other fields will be constructed using the data that was supplied, keeping them minimally functional.
+    ///
+    /// # Errors
+    ///
+    /// Should this record already exist in
+     pub fn add_entry(
+        &mut self,
+        name: &String,
+        destination: &AddressHash,
+        public_key: &String,
+        signature: String,
+    ) -> Result<(), RNSDNSERRORS> {
+
+        //
+        if self.entries.contains_key(name) {
+            return Err(RNSDNSERRORS::AlreadyExists);
+        }
+
+        // get the domain names and if there are none just default to an empty vec
+        // let domain_names = self.reverse_index.entry(*destination).or_default();
+
+        // add the domain name if it is not already present
+        // if !domain_names.contains(name) { domain_names.push(name.clone()); }
+
+        let now = Utc::now();
+
+        // error if this domain name already exists
+
+        let _ = self.entries.insert(name.clone(), DnsEntry {
+            name: name.clone(),
+            destinations: vec![*destination],
+            public_key: public_key.clone(),
+            timestamp: now,
+            expiry: now + RECORD_EXPIRY,
+            signature,
+            verifications: Vec::default(),
+        });
+
+        Ok(())
+    }
+
+    /// Forcefully overrides an entry ignoring any restrictions.
+    ///
+    /// # Behaviour
+    ///
+    /// THIS FUNCTION DOES NOT UPDATE THE REVERSE INDEX.
+    ///
+    /// It first searches for the entry using the 
+    ///
+    /// # Errors
+    ///
+    /// Should this record already exist in
+    pub fn override_forward_entry(&mut self, entry: DnsEntry) {
+        let a = self.entries.entry(entry.name.clone()).or_default();
+        *a = entry;
+    }
+
+    pub fn remove_domain(&mut self, domain: &str) {
+        // remove the domain from the main index
+        if let Some(entry) = self.entries.remove(domain) {
+            // remove every known destination
+            for destination in entry.destinations {
+                self.reverse_index.remove(&destination);
+            }
+        }
+    }
+
+    pub fn lookup(&self, name: &String) -> Option<&DnsEntry> {
+        todo!()
+    }
+        
+    pub fn reverse_lookup(&self, destination: &AddressHash) -> Option<&Vec<String>> {
+        self.reverse_index.get(destination)
+    }
+
+    pub fn get_active_entries(&self) -> Vec<&DnsEntry> {
+        todo!()
+    }
+
+    pub fn is_entry_expired(&self) -> bool {
+        todo!()
+    }
+
+    pub fn update_entry_timestamp(&mut self, name: &str) {
+        todo!()
+    }
+
+    pub fn rebuild_reverse_index(&mut self) {
+        todo!()
+    }
+
+    pub fn list_all_domain(&self) {
+        todo!()
+    }
+}
+
+#[derive(Default)]
+pub struct VerificationStore {
+    verifier_signings: HashMap<(String, AddressHash), Vec<VerifierSigning>>,
+}
+
+impl VerificationStore {
+    pub fn add_verification(&mut self, name: String, destination: AddressHash, signature: VerifierSigning) -> Result<(), RNSDNSERRORS> {
+        // TODO: verify the actual signature before doing anything
+        // maybe call on verify_verifier_signature()
+        todo!()
+    }
+    pub fn verify_verifier_signature(&self) -> bool {
+        todo!()
+    }
+
+    pub fn get_domains_by_verifier(&self, verifier: Verifier) -> Vec<&DnsEntry> {
+        // will require additional args
+        // this might be really hard to keep clean
+        
+        todo!()
+    }
+    pub fn count_verifications(&self, name: String, destination: AddressHash) -> u32 {
+        todo!()
+    }
+    pub fn get_verifications_for_domain(&self, name: String, destination: AddressHash) -> Result<&Vec<VerifierSigning>, RNSDNSERRORS> {
+        todo!()
+    }
+}
+
+#[derive(Default)]
+pub struct VerifierRegistry {
+    verifiers: HashMap<AddressHash, Verifier>,
+}
+
+impl VerifierRegistry {
+    pub fn get_entries_by_trust_level() {
+        todo!()
+    }
+    pub fn get_entries_by_verifier() {
+        todo!()
+    }
+    pub fn is_entry_trusted() {
+        todo!()
+    }
+    pub fn add_verifier() {
+        todo!()
+    }
+    pub fn get_verifier() {
+        todo!()
+    }
+}
+
+
 #[derive(Default)]
 pub struct DnsDatabase {
-    pub entries: HashMap<String, DnsEntry>,
-    pub reverse_index: HashMap<AddressHash,Vec<String>>,
+    entry_store: DnsEntryStore,
+    verification_store: VerificationStore,
+    verifier_registry: VerifierRegistry,
+}
+
+
+
+// pub struct DnsDatabase {
+    /// This maps the name to the domain to the destination
+    // pub entries: HashMap<String, DnsEntry>,
+
+    // pub reverse_index: HashMap<AddressHash,Vec<String>>,
     // (domain name, destination) both need to be specified because a single
     // signature only verfies one domain and one destination
-    pub verifiers: HashMap<(String, AddressHash), VerifierSigning>,
-}
+    // pub verifier_signings: HashMap<(String, AddressHash), VerifierSigning>,
+
+    // pub verifiers: HashMap<AddressHash, Verifier>
+// }
 
 pub const RECORD_EXPIRY: chrono::TimeDelta = chrono::Duration::days(365);
 
 
 impl DnsDatabase {
 
+    /// Alias for `Self::default()`
     pub fn new() -> Self {
        Self::default()
     }
@@ -221,13 +408,71 @@ impl DnsDatabase {
         }
     }
 
-    pub fn loopup(&self, name: &String) -> Option<DnsEntry> {
-        todo!()
-    }
 
     pub fn reverse_lookup(&self, destination: &AddressHash) -> Option<&Vec<String>> {
         self.reverse_index.get(destination)
     }
-    
+
+    // validate sig using public key, expiry, 
+    pub fn validate_entry(&self, entry: &DnsEntry) -> Result<(), RNSDNSERRORS> {
+        todo!()
+    }
+
+    // returns ALL active entries
+    pub fn get_active_entries(&self) -> Vec<&DnsEntry> {
+        todo!()
+    }
+
+    // Adds a verifier’s signature to a domain entry. Also stores it in verifier_signings
+    pub fn add_verification(&mut self, name: &str, verifier: VerifierSigning) {
+        
+    }
+
+    // verifiy one verifier_signature
+    pub fn verify_verifier_signature(&self, entry: &DnsEntry) -> Result<(), RNSDNSERRORS> {
+        todo!()
+    }
+
+    // get all the domains that the verifier vouched for
+    pub fn get_domains_by_verifier(&self, verifier: &AddressHash) -> Vec<String> {
+        todo!()
+    }
+
+    // Filters DNS entries by their verifiers’ trust level
+    // 0 is the highest
+    pub fn get_entries_by_trust_level(&self, max_trust_level: u32) -> Vec<&DnsEntry> {
+        todo!()
+    }
+
+    // remove
+    pub fn purge_expired_entries(&mut self) {
+        
+    }
+
+    // Updates the timestamp of an entry to Utc::now()
+    // Useful if the server performs a refresh or revalidation
+    // Should only be used if there are no changes to the entry
+    pub fn update_entry_timestamp(&mut self, name: &str) {
+        todo!()
+    }
+
+    // simple check
+    pub fn is_entry_expired(&self, name: &str) -> bool {
+        todo!()
+    }
+
+    // completely rebuilds the index
+    pub fn rebuild_reverse_index(&mut self) {
+        todo!()
+    }
+
+    pub fn list_all_domains(&self) -> Vec<String> {
+        todo!()
+    }
+
+    // server only
+    fn add_verifier(&mut self, verifier: Verifier) {
+        todo!()
+    }
 }
 
