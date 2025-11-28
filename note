@@ -1,0 +1,144 @@
+You're on the right track, and your design is close to supporting this feature. Here's a breakdown of what you’re trying to achieve and how you can adapt your current structure to support:
+
+✅ Your Goal
+
+You want to associate multiple AddressHashes to a single domain name, but only if each address has explicitly signed the domain name, proving it agrees to be listed.
+
+🛠️ What You Need to Do
+1. Store Per-Address Signatures
+
+Currently, DnsEntry has a Vec<AddressHash> under destinations, but there’s no data proving each of those addresses agrees to be linked to that domain.
+
+You need to change that from just a list of AddressHashes to something like:
+pub struct DestinationAssociation {
+    pub address: AddressHash,
+    pub signature: Signature, // sig(domain_name, address's private key)
+}
+And change your DnsEntry field:
+destinations: Vec<DestinationAssociation>,
+This ensures that each address is only listed if it signed the domain name with its own private key.
+
+A hybrid encryption system for email that allows decryption by multiple recipients and a user’s recovery key is technically sound, but it comes with trade-offs. Here's a breakdown of the main drawbacks and challenges:
+
+🚧 1. Metadata Exposure
+
+Even if the content is encrypted, the fact that a message includes multiple encrypted keys (e.g., one per recipient) reveals:
+
+Who the recipients are, or at least how many there are.
+
+That the message can be decrypted with a recovery key, which may invite targeted attacks.
+
+🔒 Mitigation: Use anonymous identifiers or encrypt metadata separately (e.g., with a per-message key directory).
+
+🗂️ 2. Overhead & Storage
+
+Each recipient (and the recovery key) needs their own encrypted copy of the symmetric key:
+
+Total message size increases linearly with the number of recipients.
+
+Adds storage and network overhead.
+
+🔒 Mitigation: Use group keying or broadcast encryption if messages are sent to large groups.
+
+🛠️ 3. Complexity in Implementation
+
+Implementing this securely requires:
+
+Careful management of key generation, storage, and revocation.
+
+Key directory or key mapping (recipient ID → encrypted key).
+
+Secure handling of recovery keys.
+
+Bugs or oversights (e.g., reusing nonces in AES-GCM) can break confidentiality or integrity.
+
+🔒 Mitigation: Use well-reviewed libraries and follow cryptographic best practices.
+
+🧷 4. Recovery Key Risk
+
+If the recovery key is ever compromised:
+
+Every email that includes a copy of the symmetric key encrypted with that recovery key can be decrypted.
+
+The compromise is retroactive.
+
+This creates a single point of failure.
+
+🔒 Mitigation:
+
+Rotate the recovery key periodically.
+
+Store it in a hardware security module (HSM) or secure enclave.
+
+Use forward secrecy (ephemeral symmetric keys not tied to recovery key long-term).
+
+🔁 5. Key Rotation and Revocation
+
+If a recipient's key is compromised or rotated, past emails remain decryptable with the old key.
+
+You can't retroactively remove access from a recipient.
+
+There's no easy way to revoke access after sending.
+
+🔒 Mitigation:
+
+Consider using ephemeral keys (per session/email).
+
+For better control, store encrypted emails on a server and enforce access via a proxy with user auth, though this compromises end-to-end principles.
+
+📤 6. No Forward Secrecy (by default)
+
+Traditional hybrid encryption (AES + RSA) lacks forward secrecy, meaning:
+
+If a recipient’s private key is compromised in the future, past emails can be decrypted.
+
+🔒 Mitigation:
+
+Use ephemeral key exchange protocols (e.g., X25519).
+
+Combine with session-based Diffie-Hellman for forward secrecy, like Signal does.
+
+🔑 7. Key Discovery / Distribution
+
+Recipients need a reliable way to publish and retrieve their public keys.
+
+If the sender doesn’t have an up-to-date key, the message can't be encrypted securely.
+
+🔒 Mitigation:
+
+Use a key server or directory service.
+
+Consider decentralized options (e.g., Key Transparency, Web of Trust, or blockchain-based PKI).
+
+🔍 8. Searchability and Indexing
+
+Encrypted email bodies can't be searched or indexed easily:
+
+Email clients can't perform keyword search without decrypting all messages.
+
+No server-side spam filtering or content scanning.
+
+🔒 Mitigation:
+
+Encrypt searchable metadata or build client-side search indices.
+
+Use techniques like searchable encryption (complex, often leaky).
+
+🚨 9. Legal and Compliance Barriers
+
+Enterprises may require access for compliance or legal holds.
+
+End-to-end encrypted email makes server-side archiving and inspection impossible.
+
+🔒 Mitigation: Add optional enterprise decryption keys (but this weakens user privacy).
+
+✅ Summary of Drawbacks
+Category	Drawback	Possible Mitigation
+Metadata Leakage	Reveals recipients or number of keys	Encrypt metadata, anonymous identifiers
+Scalability	Size grows with recipient count	Broadcast or group encryption
+Key Compromise	Recovery key or private key compromise affects old messages	Use forward secrecy, rotate keys
+Complexity	Harder to implement securely	Use audited libraries, formal threat modeling
+Revocation	No way to revoke after send	Store encrypted blobs server-side (not E2EE)
+Searchability	No indexing or filtering	Searchable encryption (limited)
+Forward Secrecy	Not present by default	Use ephemeral keys (e.g., DH)
+Key Discovery	Need infrastructure for key distribution	Key servers, Key Transparency

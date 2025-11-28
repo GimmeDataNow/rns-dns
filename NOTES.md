@@ -37,6 +37,8 @@ respond with error codes
 
 improvements:
 
+Fix the way public keys currently work
+
 eTDL with "use publicsuffix::List;"
 
 since the entries are long lived it might be useful to track:

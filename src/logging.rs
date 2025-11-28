@@ -45,6 +45,23 @@ pub fn logging_function(lvl: LoggingLevel, str: &str) {
     println!( "@ [{}] {} | {}", time, logging_level.to_string(), str);
 }
 
+#[allow(unreachable_patterns)]
+pub fn logging_format(lvl: LoggingLevel, str: &str) -> String {
+    let time = chrono::offset::Local::now().to_string();
+    let now = chrono::Local::now();
+    let time = now.format("%Y-%m-%d %H:%M:%S %:z");
+    let logging_level = match lvl {
+        LoggingLevel::Trace => "TRACE".purple(),
+        LoggingLevel::Info => "INFO ".blue(),
+        LoggingLevel::Warn => "WARN ".yellow(),
+        LoggingLevel::Error => "ERROR".red(),
+        LoggingLevel::Fatal => "FATAL".black().on_bright_red(),
+        _ => "not yet implemented".white()
+    };
+    format!( "@ [{}] {} | {}", time, logging_level.to_string(), str)
+}
+
+
 #[macro_export]
 macro_rules! trace { ( $($arg:tt)* ) => { logging_function(LoggingLevel::Trace, &format!($($arg)*)); }; }
 #[macro_export]

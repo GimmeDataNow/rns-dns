@@ -5,6 +5,11 @@ use chrono::Utc;
 
 use reticulum::destination::Destination;
 use reticulum::hash::AddressHash;
+use reticulum::identity::Identity;
+use ed25519_dalek::Signature;
+use x25519_dalek::PublicKey;
+
+pub const RECORD_EXPIRY: chrono::TimeDelta = chrono::Duration::days(365);
 
 /// This is a single dns entry. It serves to provide the destination, public key and
 /// validity of an entry.
@@ -42,6 +47,8 @@ use reticulum::hash::AddressHash;
 /// The entry relies on the 'submitter' (the node that request to be placed into the
 /// dns records) to validate and provide a public signature that is derived from the
 /// private key and the contents that will be signed. 
+#[allow(dead_code)]
+#[derive(Clone)]
 pub struct DnsEntry {
     /// The name is simply the human readable domain name.
     name: String,
@@ -49,13 +56,13 @@ pub struct DnsEntry {
     destinations: Vec<AddressHash>,
     /// The public key from which the destination is derived from. It is
     /// also used in verification of the record.
-    public_key: String,
+    public_key: PublicKey,
     /// The timestamp at which the record was last updated.
     timestamp: DateTime<Utc>,
     /// The timestamp at which the record will cease to be valid.
     expiry: DateTime<Utc>,
     /// The signature to validate the record.
-    signature: String,
+    signature: Signature,
     /// The list of verifiers that have vouched for this node.
     /// 
     /// This should be sorted by the server according to trust levels.
@@ -74,6 +81,17 @@ impl Default for DnsEntry {
             signature: String::default(),
             verifications: vec![],
         }
+    }
+}
+
+impl DnsEntry {
+    pub fn is_entry_expired(&self) -> bool {
+        self.expiry > Utc::now()
+    }
+
+    pub fn update_timestamp(&mut self, timestamp: DateTime<Utc>) -> &mut Self {
+        self.timestamp = timestamp;
+        self
     }
 }
 
@@ -101,11 +119,13 @@ impl Default for DnsEntry {
 ///
 /// The public key corresponding to this signature will have to be retrieved from
 /// another call.
+#[allow(dead_code)]
+#[derive(Clone)]
 pub struct VerifierSigning {
     /// The destination of the verifier
     destination: AddressHash,
     /// The signature validating the dns entry
-    signature: String, // sig(dnsentry.sig(), verifier.destination)
+    signature: Signature, // sig(dnsentry.sig(), verifier.destination)
 }
 
 
@@ -143,6 +163,7 @@ pub struct VerifierSigning {
 /// Only the dns server should have the ability to modify these records and NOT the
 /// trusted authorites. The reason is because is is a highly sensitive record which
 /// could cause cascading consequences if improperly handled.
+#[allow(dead_code)]
 pub struct Verifier {
     /// The human-readable name of the verifier 
     name: String,
@@ -152,7 +173,7 @@ pub struct Verifier {
     /// The trust level of the verifier. `0` represents the highest level.
     trust_level: u32,
     /// The public key used for validating signatures
-    public_key: String,
+    public_key: PublicKey,
 }
 
 
@@ -163,16 +184,25 @@ pub enum RNSDNSERRORS {
 /// This is the DnsDatabase.
 /// 
 /// # Fields
-/// `name` - The name is simply the human readable domain name.
+/// `entries` - This is the forward index which maps from the String to the DnsEntry
+/// `reverse_index` - This is the reverse index which maps from the Destination to
+/// the domain names
 ///
 /// # Reasoning
 ///
+/// I belive that it would be best to keep the index and the reverse index in one
+/// struct since they often affect each other and since they are already closely
+/// related.
+///
+/// Other aspect of the dns server will live in other structs.
 ///
 /// # Security
 ///
+/// This struct byitself will not offer any security features. These are to be
+/// handled by the function caller in a responsible manner.
 #[derive(Default)]
 pub struct DnsEntryStore {
-    entries: HashMap<String, DnsEntry>,
+    forward_index: HashMap<String, DnsEntry>,
     reverse_index: HashMap<AddressHash, Vec<String>>,
 }
 
@@ -184,22 +214,25 @@ impl DnsEntryStore {
     ///
     /// THIS FUNCTION DOES NOT UPDATE THE REVERSE INDEX.
     ///
-    /// It will default for all values that were not specified such as `timestamp`, `expiry`, `verifications`.
-    /// Other fields will be constructed using the data that was supplied, keeping them minimally functional.
+    /// It will default for all values that were not specified such as `timestamp`,
+    /// `expiry`, `verifications`.
+    /// Other fields will be constructed using the data that was supplied, keeping
+    /// them minimally functional.
     ///
     /// # Errors
     ///
-    /// Should this record already exist in
+    /// Should this record already exist in the forward index then this function will
+    /// return `RNSDNSERRORS::AlreadyExists`.
      pub fn add_entry(
         &mut self,
         name: &String,
         destination: &AddressHash,
-        public_key: &String,
-        signature: String,
+        public_key: &PublicKey,
+        signature: Signature,
     ) -> Result<(), RNSDNSERRORS> {
 
         //
-        if self.entries.contains_key(name) {
+        if self.forward_index.contains_key(name) {
             return Err(RNSDNSERRORS::AlreadyExists);
         }
 
@@ -211,9 +244,9 @@ impl DnsEntryStore {
 
         let now = Utc::now();
 
-        // error if this domain name already exists
+        // error if this domain name already exists 
 
-        let _ = self.entries.insert(name.clone(), DnsEntry {
+        let _ = self.forward_index.insert(name.clone(), DnsEntry {
             name: name.clone(),
             destinations: vec![*destination],
             public_key: public_key.clone(),
@@ -232,48 +265,59 @@ impl DnsEntryStore {
     ///
     /// THIS FUNCTION DOES NOT UPDATE THE REVERSE INDEX.
     ///
-    /// It first searches for the entry using the 
-    ///
-    /// # Errors
-    ///
-    /// Should this record already exist in
-    pub fn override_forward_entry(&mut self, entry: DnsEntry) {
-        let a = self.entries.entry(entry.name.clone()).or_default();
+    /// It first searches for the entry using the name from the entry which it then
+    /// overrides in its entirety
+    pub fn override_entry(&mut self, entry: DnsEntry) {
+        let a = self.forward_index.entry(entry.name.clone()).or_default();
         *a = entry;
     }
 
+    /// Remove an entry from the forward index
     pub fn remove_domain(&mut self, domain: &str) {
-        // remove the domain from the main index
-        if let Some(entry) = self.entries.remove(domain) {
-            // remove every known destination
-            for destination in entry.destinations {
-                self.reverse_index.remove(&destination);
-            }
-        }
+        self.forward_index.remove(domain);
     }
 
-    pub fn lookup(&self, name: &String) -> Option<&DnsEntry> {
-        todo!()
+    /// Returns the DnsEntry for a given domain name should one exist.
+    ///
+    /// # Behaviour
+    ///
+    /// This function will return `None` if there is no entry.
+    pub fn lookup(&self, name: &str) -> Option<&DnsEntry> {
+        self.forward_index.get(name)
     }
-        
+
+    /// Returns the list of domain names which are associated with this destination.
+    ///
+    /// # Behaviour
+    ///
+    /// This function will return `None` if there is no entry. It might also return
+    /// an empty list.
     pub fn reverse_lookup(&self, destination: &AddressHash) -> Option<&Vec<String>> {
         self.reverse_index.get(destination)
     }
 
-    pub fn get_active_entries(&self) -> Vec<&DnsEntry> {
-        todo!()
-    }
-
-    pub fn is_entry_expired(&self) -> bool {
-        todo!()
-    }
-
-    pub fn update_entry_timestamp(&mut self, name: &str) {
-        todo!()
-    }
-
+    /// Completely rebuilds the entire reverse index
+    /// 
     pub fn rebuild_reverse_index(&mut self) {
-        todo!()
+        // delete all previous records
+        self.reverse_index = HashMap::default();
+
+        // iter over every known dnsentry
+        for (domain, entry) in &self.forward_index {
+            // for every known dest add them to the reverse index if it ins't
+            // already present.
+            for dest in &entry.destinations {
+                let entry = self.reverse_index.entry(dest.clone()).or_default();
+                if !entry.contains(domain) {
+                    entry.push(domain.clone());
+                }
+            }
+        }
+    }
+
+    /// Returns all of the forward index entries.
+    pub fn get_active_forward_index(&self) -> Vec<DnsEntry> {
+        self.forward_index.values().cloned().collect()
     }
 
     pub fn list_all_domain(&self) {
@@ -281,11 +325,13 @@ impl DnsEntryStore {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Default)]
 pub struct VerificationStore {
     verifier_signings: HashMap<(String, AddressHash), Vec<VerifierSigning>>,
 }
 
+#[allow(unused_variables)]
 impl VerificationStore {
     pub fn add_verification(&mut self, name: String, destination: AddressHash, signature: VerifierSigning) -> Result<(), RNSDNSERRORS> {
         // TODO: verify the actual signature before doing anything
@@ -316,6 +362,12 @@ pub struct VerifierRegistry {
 }
 
 impl VerifierRegistry {
+    pub fn add_verifier() {
+        todo!()
+    }
+    pub fn get_verifier() {
+        todo!()
+    }
     pub fn get_entries_by_trust_level() {
         todo!()
     }
@@ -323,12 +375,6 @@ impl VerifierRegistry {
         todo!()
     }
     pub fn is_entry_trusted() {
-        todo!()
-    }
-    pub fn add_verifier() {
-        todo!()
-    }
-    pub fn get_verifier() {
         todo!()
     }
 }
@@ -340,139 +386,7 @@ pub struct DnsDatabase {
     verification_store: VerificationStore,
     verifier_registry: VerifierRegistry,
 }
-
-
-
-// pub struct DnsDatabase {
-    /// This maps the name to the domain to the destination
-    // pub entries: HashMap<String, DnsEntry>,
-
-    // pub reverse_index: HashMap<AddressHash,Vec<String>>,
-    // (domain name, destination) both need to be specified because a single
-    // signature only verfies one domain and one destination
-    // pub verifier_signings: HashMap<(String, AddressHash), VerifierSigning>,
-
-    // pub verifiers: HashMap<AddressHash, Verifier>
-// }
-
-pub const RECORD_EXPIRY: chrono::TimeDelta = chrono::Duration::days(365);
-
-
 impl DnsDatabase {
 
-    /// Alias for `Self::default()`
-    pub fn new() -> Self {
-       Self::default()
-    }
-    
-    // name, dest, public key, signature
-    pub fn add_entry_unvalidated(
-        &mut self,
-        name: &String,
-        destination: &AddressHash,
-        public_key: &String,
-        signature: String,
-    ) -> Result<(), RNSDNSERRORS> {
-
-        // get the domain names and if there are none just default to an empty vec
-        let domain_names = self.reverse_index.entry(*destination).or_default();
-
-        // add the domain name if it is not already present
-        if !domain_names.contains(name) { domain_names.push(name.clone()); }
-
-        let now = Utc::now();
-
-        // error if this domain name already exists
-        if self.entries.contains_key(name) { return Err(RNSDNSERRORS::AlreadyExists) }
-
-        let _ = self.entries.insert(name.clone(), DnsEntry {
-            name: name.clone(),
-            destinations: vec![*destination],
-            public_key: public_key.clone(),
-            timestamp: now,
-            expiry: now + RECORD_EXPIRY,
-            signature,
-            verifications: Vec::default(),
-        });
-
-        Ok(())
-    }
-
-    pub fn remove_domain(&mut self, domain: &str) {
-        // remove the domain from the main index
-        if let Some(entry) = self.entries.remove(domain) {
-            // remove every known destination
-            for destination in entry.destinations {
-                self.reverse_index.remove(&destination);
-            }
-        }
-    }
-
-
-    pub fn reverse_lookup(&self, destination: &AddressHash) -> Option<&Vec<String>> {
-        self.reverse_index.get(destination)
-    }
-
-    // validate sig using public key, expiry, 
-    pub fn validate_entry(&self, entry: &DnsEntry) -> Result<(), RNSDNSERRORS> {
-        todo!()
-    }
-
-    // returns ALL active entries
-    pub fn get_active_entries(&self) -> Vec<&DnsEntry> {
-        todo!()
-    }
-
-    // Adds a verifier’s signature to a domain entry. Also stores it in verifier_signings
-    pub fn add_verification(&mut self, name: &str, verifier: VerifierSigning) {
-        
-    }
-
-    // verifiy one verifier_signature
-    pub fn verify_verifier_signature(&self, entry: &DnsEntry) -> Result<(), RNSDNSERRORS> {
-        todo!()
-    }
-
-    // get all the domains that the verifier vouched for
-    pub fn get_domains_by_verifier(&self, verifier: &AddressHash) -> Vec<String> {
-        todo!()
-    }
-
-    // Filters DNS entries by their verifiers’ trust level
-    // 0 is the highest
-    pub fn get_entries_by_trust_level(&self, max_trust_level: u32) -> Vec<&DnsEntry> {
-        todo!()
-    }
-
-    // remove
-    pub fn purge_expired_entries(&mut self) {
-        
-    }
-
-    // Updates the timestamp of an entry to Utc::now()
-    // Useful if the server performs a refresh or revalidation
-    // Should only be used if there are no changes to the entry
-    pub fn update_entry_timestamp(&mut self, name: &str) {
-        todo!()
-    }
-
-    // simple check
-    pub fn is_entry_expired(&self, name: &str) -> bool {
-        todo!()
-    }
-
-    // completely rebuilds the index
-    pub fn rebuild_reverse_index(&mut self) {
-        todo!()
-    }
-
-    pub fn list_all_domains(&self) -> Vec<String> {
-        todo!()
-    }
-
-    // server only
-    fn add_verifier(&mut self, verifier: Verifier) {
-        todo!()
-    }
 }
 
