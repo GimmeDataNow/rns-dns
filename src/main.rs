@@ -1,6 +1,7 @@
 use clap::{Arg, ArgAction, ArgGroup};
 use reticulum::destination::{DestinationName,SingleInputDestination};
 use reticulum::identity::PrivateIdentity;
+use reticulum::iface::tcp_client::TcpClient;
 use reticulum::iface::tcp_server::TcpServer;
 use reticulum::transport::{Transport, TransportConfig};
 use shlex;
@@ -80,6 +81,8 @@ async fn main() {
         if args.get_flag("router") {
             info!("Router is now starting");
             routing_node_service(None, None, "router".to_owned(), None, None).await.unwrap();
+            // 202.61.243.41
+            // target_port = 4965
         }
 
     } else {
@@ -227,12 +230,33 @@ fn spawn_process(name: String, command: String, sender: mpsc::UnboundedSender<(S
             });
 
         let stdout = child.stdout.take().expect("No stdout");
-        let reader = BufReader::new(stdout);
-        let mut lines = reader.lines();
+        let stderr = child.stderr.take().expect("No stderr");
+        
+        let name_clone = name.clone();
+        let sender_clone = sender.clone();
 
-        while let Ok(Some(line)) = lines.next_line().await {
-            sender.send((name.clone(), line)).unwrap();
-        }
+        // let reader = BufReader::new(stdout);
+        // let mut lines = reader.lines();
+
+        // while let Ok(Some(line)) = lines.next_line().await {
+            // sender.send((name.clone(), line)).unwrap();
+        // }
+        tokio::spawn(async move {
+            let reader = BufReader::new(stdout);
+            let mut lines = reader.lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                sender_clone.send((name_clone.clone(), line)).unwrap();
+            }
+        });
+        
+        // Read stderr in another task
+        tokio::spawn(async move {
+            let reader = BufReader::new(stderr);
+            let mut lines = reader.lines();
+            while let Ok(Some(line)) = lines.next_line().await {
+                sender.send((name.clone(), format!("[STDERR] {}", line))).unwrap();
+            }
+        });
     });
 }
 
@@ -264,33 +288,50 @@ pub async fn routing_node_service(
     
     info!("Routing node listening on {remote_host}:{remote_port}");
 
+    let _ = transport.iface_manager().lock().await.spawn(
+        TcpClient::new(format!("{}:{}", "reticulum.betweentheborders.com", "4242")),
+        TcpClient::spawn,
+    );
+
     // Subscribe to announcement events to discover the server.
-    let mut announce_receiver = transport.recv_announces().await;
+    let re = transport.recv_announces();
+    let mut announce_receiver = re.await;
     info!("Listening for server announcements...");
 
     let dest_name = DestinationName::new("rns-dns", "receiv-announce");
     let announce_dest = SingleInputDestination::new(ident, dest_name);
 
     loop {
+        info!("3");
         let announcement = announce_dest.announce(OsRng, None).expect("failed to create an announce");
+        info!("4");
+
         transport.send_packet(announcement).await;
+        info!("sent");
 
-        if let Ok(announce) = announce_receiver.recv().await {
-            let dest = announce.destination.lock().await;
+
+        match announce_receiver.try_recv() {
+            Ok(announce) => {
+                let dest = announce.destination.lock().await;
             
-            info!("Announce info is: {:?}", dest.desc.address_hash);
+                info!("Announce info is: {:?}", dest.desc.address_hash);
 
-            // if the send panics then this is irrecoverable
-            match &sender {
-                Some(sender) => {
-                    let msg = logging_format(LoggingLevel::Info, &format!("Announce info is: {:?}", dest.desc.address_hash));
-                    sender.send((name.clone(), msg.clone())).unwrap();
-                },
-                None => {
-                    info!("Announce info is: {:?}", dest.desc.address_hash);
-                }
-            }
-        }
+                // if the send panics then this is irrecoverable
+                match &sender {
+                    Some(sender) => {
+                        let msg = logging_format(LoggingLevel::Info, &format!("Announce info is: {:?}", dest.desc.address_hash));
+                        // sender.send((name.clone(), msg.clone())).unwrap();
+                        if let Err(e) = sender.send((name.clone(), msg.clone())) {
+                            error!("Failed to send log message: {:?}", e); // This will catch the panic
+                        }
+                    },
+                    None => {
+                        info!("Announce info is: {:?}", dest.desc.address_hash);
+                    }
+                }    
+            },
+            Err(_) => {}
+        };
 
         tokio::time::sleep(Duration::from_secs(15)).await;
     }
