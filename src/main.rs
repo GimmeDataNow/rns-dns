@@ -1,12 +1,17 @@
 use clap::{Arg, ArgAction, ArgGroup};
+use reticulum::destination::{DestinationName,SingleInputDestination};
+use reticulum::identity::PrivateIdentity;
+use reticulum::iface::tcp_server::TcpServer;
+use reticulum::transport::{Transport, TransportConfig};
 use shlex;
 use std::io;
-
+use std::time::Duration;
 use ratatui::crossterm::event::{self, Event, KeyCode};
 use ratatui::{
     backend::CrosstermBackend, crossterm::{execute, terminal::{self, EnterAlternateScreen, LeaveAlternateScreen}}, layout::{Constraint, Direction, Layout}, widgets::{Block, Borders, List, ListItem, Paragraph}, Terminal
 };
 use tokio::{io::{AsyncBufReadExt, BufReader}, sync::mpsc};
+use rand_core::OsRng;
 
 #[macro_use]
 pub mod logging;
@@ -15,7 +20,7 @@ use logging::{logging_format, logging_function, LoggingLevel};
 #[tokio::main]
 async fn main() {
     let args = clap::Command::new("rns-dns")
-        .author("GIMMEDATANOW - Github account")
+        .author("GimmeDataNow - Github account")
         .version("0.0.1")
         .about("A simple DNS server for the reticulum network stack")
         .arg(
@@ -72,6 +77,11 @@ async fn main() {
             .unwrap_or_default(); 
         trace!("-o is set to : <{}>", options.concat());
 
+        if args.get_flag("router") {
+            info!("Router is now starting");
+            routing_node_service(None, None, "router".to_owned(), None, None).await.unwrap();
+        }
+
     } else {
         info!("You have selected visual mode");
         visual_mode().await.unwrap();
@@ -102,7 +112,7 @@ async fn visual_mode() -> Result<(), Box<dyn std::error::Error>> {
 
     // List of processes
     let mut processes: Vec<ProcessLog> = vec![
-        ProcessLog { name: "prog1".to_string(), command: "ping 0.0.0.0".to_owned(), logs: vec![] },
+        ProcessLog { name: "prog1".to_string(), command: "cargo run -- -c -r".to_owned(), logs: vec![] },
         ProcessLog { name: "prog2".to_string(), command: "echo 'H'".to_owned(), logs: vec![] },
     ];
 
@@ -206,8 +216,9 @@ fn spawn_process(name: String, command: String, sender: mpsc::UnboundedSender<(S
 
         let mut child = command_builder
             .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
             .spawn()
-            .unwrap_or_else(|e| {
+            .unwrap_or_else(|_| {
                 let error_msg = logging_format(LoggingLevel::Error, &format!("Failed to spawn process <{}>", name));
                 // if the send panics then this is irrecoverable
                 sender.send((name.clone(), error_msg.clone())).unwrap();
@@ -223,4 +234,64 @@ fn spawn_process(name: String, command: String, sender: mpsc::UnboundedSender<(S
             sender.send((name.clone(), line)).unwrap();
         }
     });
+}
+
+pub async fn routing_node_service(
+    sender: Option<mpsc::UnboundedSender<(String, String)>>,
+    identity: Option<String>,
+    name: String,
+    remote_host: Option<String>,
+    remote_port: Option<u16>
+) -> Result<(), Box<dyn std::error::Error>> {
+
+    info!("Starting routing node: {}", name);
+
+    // create ident
+    let ident = PrivateIdentity::new_from_name(&name);
+    // group all spawned services by this app under "rns-dns"
+    let transport_config = TransportConfig::new("rns-dns", &ident, true);
+    let transport = Transport::new(transport_config);
+
+    // extract the values
+    let fallback_host = "127.0.0.1".to_string();
+    let remote_host = remote_host.as_ref().unwrap_or(&fallback_host);
+    let remote_port = remote_port.unwrap_or(53317);
+
+    let _ = transport.iface_manager().lock().await.spawn(
+        TcpServer::new(format!("{}:{}", remote_port, remote_port), transport.iface_manager()),
+        TcpServer::spawn,
+    );
+    
+    info!("Routing node listening on {remote_host}:{remote_port}");
+
+    // Subscribe to announcement events to discover the server.
+    let mut announce_receiver = transport.recv_announces().await;
+    info!("Listening for server announcements...");
+
+    let dest_name = DestinationName::new("rns-dns", "receiv-announce");
+    let announce_dest = SingleInputDestination::new(ident, dest_name);
+
+    loop {
+        let announcement = announce_dest.announce(OsRng, None).expect("failed to create an announce");
+        transport.send_packet(announcement).await;
+
+        if let Ok(announce) = announce_receiver.recv().await {
+            let dest = announce.destination.lock().await;
+            
+            info!("Announce info is: {:?}", dest.desc.address_hash);
+
+            // if the send panics then this is irrecoverable
+            match &sender {
+                Some(sender) => {
+                    let msg = logging_format(LoggingLevel::Info, &format!("Announce info is: {:?}", dest.desc.address_hash));
+                    sender.send((name.clone(), msg.clone())).unwrap();
+                },
+                None => {
+                    info!("Announce info is: {:?}", dest.desc.address_hash);
+                }
+            }
+        }
+
+        tokio::time::sleep(Duration::from_secs(15)).await;
+    }
 }
