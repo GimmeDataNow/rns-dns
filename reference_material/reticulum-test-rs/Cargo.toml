@@ -1,0 +1,13 @@
+[package]
+name = "reticulum-test"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+env_logger = "0.10.*"
+log = "0.4.*"
+tokio = { version = "1.*", features = ["full"] }
+
+[dependencies.reticulum]
+git = "https://github.com/BeechatNetworkSystemsLtd/Reticulum-rs"
+version = "0.1.*"
