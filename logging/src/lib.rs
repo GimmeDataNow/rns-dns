@@ -2,8 +2,8 @@
 //! info functions / macros used throughout the program.
 
 // logging utils
-use colored::Colorize;
 use chrono;
+use colored::Colorize;
 
 /// This is used for changing the behaviour of the logging
 /// function.
@@ -39,9 +39,9 @@ pub fn logging_function(lvl: LoggingLevel, str: &str) {
         LoggingLevel::Warn => "WARN ".yellow(),
         LoggingLevel::Error => "ERROR".red(),
         LoggingLevel::Fatal => "FATAL".black().on_bright_red(),
-        _ => "not yet implemented".white()
+        _ => "not yet implemented".white(),
     };
-    println!( "@ [{}] {} | {}", time, logging_level.to_string(), str);
+    println!("@ [{}] {} | {}", time, logging_level.to_string(), str);
 }
 
 #[allow(unreachable_patterns)]
@@ -54,23 +54,21 @@ pub fn logging_format(lvl: LoggingLevel, str: &str) -> String {
         LoggingLevel::Warn => "WARN ".yellow(),
         LoggingLevel::Error => "ERROR".red(),
         LoggingLevel::Fatal => "FATAL".black().on_bright_red(),
-        _ => "not yet implemented".white()
+        _ => "not yet implemented".white(),
     };
-    format!( "@ [{}] {} | {}", time, logging_level.to_string(), str)
+    format!("@ [{}] {} | {}", time, logging_level.to_string(), str)
 }
 
-
 #[macro_export]
-macro_rules! trace { ( $($arg:tt)* ) => { logging_function(LoggingLevel::Trace, &format!($($arg)*)); }; }
+macro_rules! trace { ( $($arg:tt)* ) => { $crate::logging_function($crate::LoggingLevel::Trace, &format!($($arg)*)); }; }
 #[macro_export]
-macro_rules! info  { ( $($arg:tt)* ) => { logging_function(LoggingLevel::Info,  &format!($($arg)*)); }; }
+macro_rules! info  { ( $($arg:tt)* ) => { $crate::logging_function($crate::LoggingLevel::Info,  &format!($($arg)*)); }; }
 #[macro_export]
-macro_rules! warn  { ( $($arg:tt)* ) => { logging_function(LoggingLevel::Warn,  &format!($($arg)*)); }; }
+macro_rules! warn  { ( $($arg:tt)* ) => { $crate::logging_function($crate::LoggingLevel::Warn,  &format!($($arg)*)); }; }
 #[macro_export]
-macro_rules! error { ( $($arg:tt)* ) => { logging_function(LoggingLevel::Error, &format!($($arg)*)); }; }
+macro_rules! error { ( $($arg:tt)* ) => { $crate::logging_function($crate::LoggingLevel::Error, &format!($($arg)*)); }; }
 #[macro_export]
-macro_rules! fatal { ( $($arg:tt)* ) => { logging_function(LoggingLevel::Fatal, &format!($($arg)*)); }; }
-
+macro_rules! fatal { ( $($arg:tt)* ) => { $crate::logging_function($crate::LoggingLevel::Fatal, &format!($($arg)*)); }; }
 
 #[cfg(test)]
 mod tests {
@@ -79,8 +77,8 @@ mod tests {
     #[test]
     fn string_length() {
         logging_function(LoggingLevel::Trace, "wow");
-        logging_function(LoggingLevel::Info , "wow");
-        logging_function(LoggingLevel::Warn , "wow");
+        logging_function(LoggingLevel::Info, "wow");
+        logging_function(LoggingLevel::Warn, "wow");
         logging_function(LoggingLevel::Error, "wow");
         logging_function(LoggingLevel::Fatal, "wow");
 
@@ -88,6 +86,6 @@ mod tests {
         info!("");
         warn!("");
         error!("");
-        fatal!("");        
+        fatal!("");
     }
 }

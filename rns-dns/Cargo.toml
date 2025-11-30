@@ -1,0 +1,28 @@
+[package]
+name = "rns-dns"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+# logging 
+colored = "3.0.0"
+chrono = "0.4.41"
+
+# interface
+ratatui = "0.29.0"
+clap = { version = "4.5.53", features = ["derive"] }
+shlex = "1.3.0"
+
+# rns
+tokio = { version = "1.46.1", features = ["full"] }
+rand = "0.8"
+rand_chacha = "0.3"
+rand_core = "0.6"
+# rand_core = { version = "0.6.4", features = ["getrandom"] }
+reticulum = { git = "https://github.com/BeechatNetworkSystemsLtd/Reticulum-rs", rev = "af75e2ca1b74e135111583f3d3aae2b1fea5d1c8"}
+
+x25519-dalek = { version = "2.0.1", features = ["static_secrets"] }
+ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
+logging = { version = "0.1.0", path = "../logging" }
+

@@ -27,7 +27,8 @@
               (rust-bin.nightly.latest.default.override {
                 extensions = [ "rust-src" ];
               })
-              rust-analyzer
+              # rust-analyzer
+              rust-bin.nightly.latest.rust-analyzer
               # glibc.static
               pkg-config
               openssl
