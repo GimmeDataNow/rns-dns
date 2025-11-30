@@ -229,139 +229,6 @@ impl Default for LogViewState {
     }
 }
 
-// async fn visual_mode_old() -> Result<(), Box<dyn std::error::Error>> {
-//     // Terminal setup
-//     ratatui::crossterm::terminal::enable_raw_mode()?;
-//     let stdout = io::stdout();
-//     let backend = CrosstermBackend::new(stdout);
-//     let mut terminal = Terminal::new(backend)?;
-//     execute!(
-//         terminal.backend_mut(),
-//         EnterAlternateScreen,
-//         terminal::Clear(terminal::ClearType::All)
-//     )?;
-
-//     // Channels for sending logs from tasks to main loop
-//     let (tx, mut rx) = mpsc::unbounded_channel();
-
-//     // List of processes
-//     let mut processes: Vec<ProcessLog> = vec![
-//         // ProcessLog {
-//         // name: "router".to_string(),
-//         // command: "cargo run -- -c --router".to_owned(),
-//         // logs: vec![],
-//         // },
-//         ProcessLog {
-//             name: "server".to_string(),
-//             command: "cargo run -- -c --experimental".to_owned(),
-//             logs: vec![],
-//         },
-//         ProcessLog {
-//             name: "client".to_string(),
-//             command: "cargo run -- -c --experimental2".to_owned(),
-//             logs: vec![],
-//         },
-//         ProcessLog {
-//             name: "ping loop".to_string(),
-//             command: "ping 127.0.0.1".to_owned(),
-//             logs: vec![],
-//         },
-//     ];
-
-//     // Spawn async tasks for each process
-//     for proc in &processes {
-//         spawn_process(proc.name.clone(), proc.command.clone(), tx.clone());
-//     }
-
-//     let mut selected = 0;
-
-//     loop {
-//         // Drain channel for new logs
-//         while let Ok((name, line)) = rx.try_recv() {
-//             if let Some(p) = processes.iter_mut().find(|p| p.name == name) {
-//                 p.logs.push(line);
-//                 if p.logs.len() > 1000 {
-//                     p.logs.remove(0);
-//                 } // keep buffer size fixed
-//             }
-//         }
-
-//         // Draw UI
-//         terminal.draw(|f| {
-//             let size = f.area();
-//             let main_chunks = Layout::default()
-//                 .direction(Direction::Horizontal)
-//                 .constraints([Constraint::Percentage(20), Constraint::Min(10)].as_ref())
-//                 .split(size);
-
-//             let left_chunks = Layout::default()
-//                 .direction(Direction::Vertical)
-//                 .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-//                 .split(main_chunks[0]);
-
-//             // Process list
-//             let items: Vec<ListItem> = processes
-//                 .iter()
-//                 .map(|p| ListItem::new(p.name.clone()))
-//                 .collect();
-//             let mut state = ratatui::widgets::ListState::default();
-//             state.select(Some(selected));
-
-//             let process_list = List::new(items.clone()).block(
-//                 Block::default()
-//                     .borders(Borders::ALL)
-//                     .title("Processes")
-//                     .border_type(ratatui::widgets::BorderType::Rounded),
-//             );
-//             f.render_stateful_widget(process_list, left_chunks[0], &mut state);
-
-//             let process_list = List::new(items).block(
-//                 Block::default()
-//                     .borders(Borders::ALL)
-//                     .title("Execute Command")
-//                     .border_type(ratatui::widgets::BorderType::Rounded),
-//             );
-//             f.render_stateful_widget(process_list, left_chunks[1], &mut state);
-
-//             let raw_text = processes[selected].logs.join("\n");
-//             let parsed = raw_text.into_text().unwrap();
-
-//             let logs = Paragraph::new(parsed).block(
-//                 Block::default()
-//                     .borders(Borders::ALL)
-//                     .title("Logs")
-//                     .border_type(ratatui::widgets::BorderType::Rounded),
-//             );
-
-//             f.render_widget(logs, main_chunks[1]);
-//         })?;
-
-//         // Input handling
-//         if event::poll(std::time::Duration::from_millis(100))? {
-//             if let Event::Key(key) = event::read()? {
-//                 match key.code {
-//                     KeyCode::Up => {
-//                         if selected > 0 {
-//                             selected -= 1;
-//                         }
-//                     }
-//                     KeyCode::Down => {
-//                         if selected < processes.len() - 1 {
-//                             selected += 1;
-//                         }
-//                     }
-//                     KeyCode::Char('q') => break,
-//                     _ => {}
-//                 }
-//             }
-//         }
-//     }
-//     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-//     terminal::disable_raw_mode()?;
-
-//     Ok(())
-// }
-
 fn spawn_process(name: String, command: String, sender: mpsc::UnboundedSender<(String, String)>) {
     tokio::spawn(async move {
         let parts = match shlex::split(&command) {
@@ -424,7 +291,19 @@ fn spawn_process(name: String, command: String, sender: mpsc::UnboundedSender<(S
     });
 }
 
-#[allow(dead_code)]
+fn get_visible_logs(p: &ProcessLog) -> Vec<String> {
+    if let Some(ref filter) = p.filter {
+        p.logs
+            .iter()
+            .filter(|line| line.contains(filter))
+            .cloned()
+            .collect()
+    } else {
+        p.logs.iter().cloned().collect()
+    }
+}
+
+// #[allow(dead_code)]
 async fn visual_mode() -> Result<(), Box<dyn std::error::Error>> {
     ratatui::crossterm::terminal::enable_raw_mode()?;
     // Terminal setup
@@ -489,28 +368,18 @@ async fn visual_mode() -> Result<(), Box<dyn std::error::Error>> {
     loop {
         // Drain channel for new logs
         while let Ok((name, line)) = rx.try_recv() {
-            if let Some((idx, _)) = processes.iter().enumerate().find(|(_, p)| p.name == name) {
-                processes[idx].logs.push(line);
-                // cap buffer
-                let log_len = processes[idx].logs.len();
-                if log_len > 10000 {
-                    let remove_count = log_len - 10000;
-                    processes[idx].logs.drain(0..remove_count);
+            if let Some(p) = processes.iter_mut().find(|p| p.name == name) {
+                p.logs.push_back(line);
+
+                if p.logs.len() > 10000 {
+                    p.logs.pop_front();
                 }
-                // if processes[idx].logs.len() > 10000 {
-                //     // drop oldest
-                //     processes[idx]
-                //         .logs
-                //         .drain(0..(processes[idx].logs.len() - 10000));
-                // }
-                // If follow is enabled for this process, update scroll to show bottom.
-                if views[idx].follow {
-                    // We'll adjust scroll during draw based on view height.
-                    // keep scroll_top as a sentinel (use 0 to indicate "stick to bottom" isn't reliable),
-                    // but set to a large value to indicate follow-enabled
-                    // -> we'll implement follow by setting scroll_top after measuring view height.
+
+                // auto-follow mode: reset to bottom
+                if p.tail {
+                    p.scroll = 0;
                 }
-            }
+            };
         }
 
         // Draw UI
@@ -714,8 +583,6 @@ async fn visual_mode() -> Result<(), Box<dyn std::error::Error>> {
                             views[selected].scroll_top = 0;
                         }
                         KeyCode::End => {
-                            // go to bottom and resume follow
-                            // follow becomes true
                             views[selected].follow = true;
                         }
                         KeyCode::Char('t') => {
