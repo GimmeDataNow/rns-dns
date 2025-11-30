@@ -1,5 +1,5 @@
+use ansi_to_tui::IntoText as _;
 use clap::{Arg, ArgAction, ArgGroup};
-use rand_core::OsRng;
 use ratatui::crossterm::event::{self, Event, KeyCode};
 use ratatui::{
     Terminal,
@@ -11,25 +11,19 @@ use ratatui::{
     layout::{Constraint, Direction, Layout},
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
-use reticulum::destination::{DestinationName, SingleInputDestination};
-use reticulum::identity::PrivateIdentity;
-use reticulum::iface::tcp_client::TcpClient;
-use reticulum::iface::tcp_server::TcpServer;
-use reticulum::transport::{Transport, TransportConfig};
 use shlex;
 use std::io;
-use std::time::Duration;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     sync::mpsc,
 };
 
-// pub mod logging;
-// #[macro_use]
-// use logging::{logging_format, logging_function, LoggingLevel};
+mod server;
+use colored;
 
 #[tokio::main]
 async fn main() {
+    colored::control::set_override(true);
     let args = clap::Command::new("rns-dns")
         .author("GimmeDataNow - Github account")
         .version("0.0.1")
@@ -72,6 +66,13 @@ async fn main() {
                 .help("Set critical options")
                 .num_args(1..),
         )
+        .arg(
+            Arg::new("experimental")
+                .short('e')
+                .long("experimental")
+                .help("experimental feature")
+                .action(ArgAction::SetTrue),
+        )
         .group(
             ArgGroup::new("router or dns")
                 .args(["router", "dns"])
@@ -79,24 +80,28 @@ async fn main() {
         )
         .get_matches();
 
+    if args.get_flag("experimental") {
+        server::start_server().await;
+    }
     if args.get_flag("cli") {
-        logging::info!("You have selected cmd mode");
+        log::info!("You have selected cmd mode");
         let options: Vec<_> = args
             .get_many::<String>("options")
             .map(|vals| vals.cloned().collect())
             .unwrap_or_default();
-        logging::trace!("-o is set to : <{}>", options.concat());
+        log::trace!("-o is set to : <{}>", options.concat());
 
         if args.get_flag("router") {
-            logging::info!("Router is now starting");
-            routing_node_service(None, None, "router".to_owned(), None, None)
-                .await
-                .unwrap();
+            log::info!("Router is now starting");
+            server::start_server().await;
+            // routing_node_service(None, None, "router".to_owned(), None, None)
+            // .await
+            // .unwrap();
             // 202.61.243.41
             // target_port = 4965
         }
     } else {
-        logging::info!("You have selected visual mode");
+        log::info!("You have selected visual mode");
         visual_mode().await.unwrap();
     }
 }
@@ -128,6 +133,11 @@ async fn visual_mode() -> Result<(), Box<dyn std::error::Error>> {
         ProcessLog {
             name: "prog1".to_string(),
             command: "cargo run -- -c -r".to_owned(),
+            logs: vec![],
+        },
+        ProcessLog {
+            name: "server".to_string(),
+            command: "cargo run -- -c -e".to_owned(),
             logs: vec![],
         },
         ProcessLog {
@@ -193,13 +203,28 @@ async fn visual_mode() -> Result<(), Box<dyn std::error::Error>> {
             f.render_stateful_widget(process_list, left_chunks[1], &mut state);
 
             // Log box
-            let log_text = processes[selected].logs.join("\n");
-            let logs = Paragraph::new(log_text).block(
+            // let log_text = processes[selected].logs.join("\n");
+            // let logs = Paragraph::new(log_text).block(
+            //     Block::default()
+            //         .borders(Borders::ALL)
+            //         .title("Logs")
+            //         .border_type(ratatui::widgets::BorderType::Rounded),
+            // );
+            // f.render_widget(logs, main_chunks[1]);
+
+            let raw_text = processes[selected].logs.join("\n");
+
+            // Convert ANSI → ratatui Styled Text
+            // let parsed = ratatui::text::parse_ansi(&raw_text);
+            let parsed = raw_text.into_text().unwrap();
+
+            let logs = Paragraph::new(parsed).block(
                 Block::default()
                     .borders(Borders::ALL)
                     .title("Logs")
                     .border_type(ratatui::widgets::BorderType::Rounded),
             );
+
             f.render_widget(logs, main_chunks[1]);
         })?;
 
@@ -234,8 +259,8 @@ fn spawn_process(name: String, command: String, sender: mpsc::UnboundedSender<(S
         let parts = match shlex::split(&command) {
             Some(p) => p,
             None => {
-                let error_msg = logging::logging_format(
-                    logging::LoggingLevel::Error,
+                let error_msg = log::logging_format(
+                    log::LoggingLevel::Error,
                     &format!("Failed to parse command line for <{}>", name),
                 );
                 // if the send panics then this is irrecoverable
@@ -254,8 +279,8 @@ fn spawn_process(name: String, command: String, sender: mpsc::UnboundedSender<(S
             .stderr(std::process::Stdio::piped())
             .spawn()
             .unwrap_or_else(|_| {
-                let error_msg = logging::logging_format(
-                    logging::LoggingLevel::Error,
+                let error_msg = log::logging_format(
+                    log::LoggingLevel::Error,
                     &format!("Failed to spawn process <{}>", name),
                 );
                 // if the send panics then this is irrecoverable
@@ -295,87 +320,4 @@ fn spawn_process(name: String, command: String, sender: mpsc::UnboundedSender<(S
             }
         });
     });
-}
-
-pub async fn routing_node_service(
-    sender: Option<mpsc::UnboundedSender<(String, String)>>,
-    identity: Option<String>,
-    name: String,
-    remote_host: Option<String>,
-    remote_port: Option<u16>,
-) -> Result<(), Box<dyn std::error::Error>> {
-    logging::info!("Starting routing node: {}", name);
-
-    // create ident
-    let ident = PrivateIdentity::new_from_name(&name);
-    // group all spawned services by this app under "rns-dns"
-    let transport_config = TransportConfig::new("rns-dns", &ident, true);
-    let transport = Transport::new(transport_config);
-
-    // extract the values
-    let fallback_host = "127.0.0.1".to_string();
-    let remote_host = remote_host.as_ref().unwrap_or(&fallback_host);
-    let remote_port = remote_port.unwrap_or(53317);
-
-    let _ = transport.iface_manager().lock().await.spawn(
-        TcpServer::new(
-            format!("{}:{}", remote_port, remote_port),
-            transport.iface_manager(),
-        ),
-        TcpServer::spawn,
-    );
-
-    logging::info!("Routing node listening on {remote_host}:{remote_port}");
-
-    let _ = transport.iface_manager().lock().await.spawn(
-        TcpClient::new(format!("{}:{}", "reticulum.betweentheborders.com", "4242")),
-        TcpClient::spawn,
-    );
-
-    // Subscribe to announcement events to discover the server.
-    let re = transport.recv_announces();
-    let mut announce_receiver = re.await;
-    logging::info!("Listening for server announcements...");
-
-    let dest_name = DestinationName::new("rns-dns", "receiv-announce");
-    let announce_dest = SingleInputDestination::new(ident, dest_name);
-
-    loop {
-        logging::info!("3");
-        let announcement = announce_dest
-            .announce(OsRng, None)
-            .expect("failed to create an announce");
-        logging::info!("4");
-
-        transport.send_packet(announcement).await;
-        logging::info!("sent");
-
-        match announce_receiver.try_recv() {
-            Ok(announce) => {
-                let dest = announce.destination.lock().await;
-
-                logging::info!("Announce info is: {:?}", dest.desc.address_hash);
-
-                // if the send panics then this is irrecoverable
-                match &sender {
-                    Some(sender) => {
-                        let msg = logging::logging_format(
-                            logging::LoggingLevel::Info,
-                            &format!("Announce info is: {:?}", dest.desc.address_hash),
-                        );
-                        // sender.send((name.clone(), msg.clone())).unwrap();
-                        if let Err(e) = sender.send((name.clone(), msg.clone())) {
-                            logging::error!("Failed to send log message: {:?}", e); // This will catch the panic
-                        }
-                    }
-                    None => {
-                        logging::info!("Announce info is: {:?}", dest.desc.address_hash);
-                    }
-                }
-            }
-            Err(_) => {}
-        };
-
-        tokio::time::sleep(Duration::from_secs(15)).await;
-    }
 }
