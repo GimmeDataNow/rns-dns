@@ -41,7 +41,7 @@ pub fn logging_function(lvl: LoggingLevel, str: &str) {
         LoggingLevel::Fatal => "FATAL".black().on_bright_red(),
         _ => "not yet implemented".white(),
     };
-    println!("@ [{}] {} | {}", time, logging_level.to_string(), str);
+    println!("@[{}] {} | {}", time, logging_level.to_string(), str);
 }
 
 #[allow(unreachable_patterns)]
@@ -56,7 +56,7 @@ pub fn logging_format(lvl: LoggingLevel, str: &str) -> String {
         LoggingLevel::Fatal => "FATAL".black().on_bright_red(),
         _ => "not yet implemented".white(),
     };
-    format!("@ [{}] {} | {}", time, logging_level.to_string(), str)
+    format!("@[{}] {} | {}", time, logging_level.to_string(), str)
 }
 
 #[macro_export]
