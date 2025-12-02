@@ -31,7 +31,27 @@ pub async fn start_router(
 
     // the label "router" is entirely cosmetic and does not affect the functionality in any way.
     // rebroadcast set to false
-    let mut transport = Transport::new(TransportConfig::new("router", &private_id, false));
+    let mut transport = Transport::new(TransportConfig::new("router", &private_id, true));
+
+    let local_connection = match settings.local_connection {
+        #[allow(unreachable_patterns)]
+        Some(c) => match c {
+            types::Connection::NormalInternet((ip, port)) => {
+                format!("{ip}:{port}")
+            }
+            _ => todo!(),
+        },
+        None => format!("0.0.0.0:4243"),
+    };
+
+    let remote_connection = match settings.remote_connection {
+        #[allow(unreachable_patterns)]
+        Some(c) => match c {
+            types::Connection::NormalInternet((ip, port)) => Some(format!("{ip}:{port}")),
+            _ => todo!(),
+        },
+        None => None,
+    };
 
     let address_hash = transport.iface_manager().lock().await.spawn(
         UdpInterface::new("0.0.0.0:4243", Some("127.0.0.1:4242")),
@@ -43,10 +63,11 @@ pub async fn start_router(
     let destination = transport
         .add_destination(
             private_id.clone(),
-            DestinationName::new(
-                &config_destination.app_name,          // ~= endpoint
-                &config_destination.application_space, // ~= virtual network
-            ),
+            // DestinationName::new(
+            //     &config_destination.app_name,          // ~= endpoint
+            //     &config_destination.application_space, // ~= virtual network
+            // ),
+            DestinationName::new("test-server", "app.1"),
         )
         .await;
 
