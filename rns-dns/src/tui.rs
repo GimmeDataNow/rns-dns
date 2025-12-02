@@ -278,7 +278,7 @@ pub async fn tui() -> Result<(), Box<dyn std::error::Error>> {
         // ProcessLog {
         // name: "server".to_string(),
         // command: "cargo run -- -c --experimental".to_owned(),
-        // logs: VecDeque::with_capacity(10000),
+        // logs: VecDeque::with_capacity(1000),
         // scroll: 0,
         // tail: true,
         // filter: None,
@@ -293,20 +293,20 @@ pub async fn tui() -> Result<(), Box<dyn std::error::Error>> {
         },
         ProcessLog {
             name: "router".to_string(),
-            command: "cargo run -- -c --experimental3".to_owned(),
+            command: "cargo run -- -c -r".to_owned(),
             logs: VecDeque::with_capacity(10000),
             scroll: 0,
             tail: true,
             filter: None,
         },
-        ProcessLog {
-            name: "ping loop".to_string(),
-            command: "ping 127.0.0.1".to_owned(),
-            logs: VecDeque::with_capacity(10000),
-            scroll: 0,
-            tail: true,
-            filter: None,
-        },
+        // ProcessLog {
+        //     name: "ping loop".to_string(),
+        //     command: "ping 127.0.0.1".to_owned(),
+        //     logs: VecDeque::with_capacity(1000),
+        //     scroll: 0,
+        //     tail: true,
+        //     filter: None,
+        // },
     ];
 
     // Per-process view state

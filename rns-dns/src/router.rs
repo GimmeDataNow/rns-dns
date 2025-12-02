@@ -1,28 +1,47 @@
+use base64::Engine;
 // use env_logger;
 // use log;
 use tokio::time;
 
-use reticulum::destination::DestinationName;
 use reticulum::destination::link::LinkEvent;
 use reticulum::identity::PrivateIdentity;
 use reticulum::iface::udp::UdpInterface;
+use reticulum::{destination::DestinationName, hash::AddressHash};
 //use reticulum::iface::tcp_server::TcpServer;
 use rand_core::OsRng;
 use reticulum::transport::{Transport, TransportConfig};
+use x25519_dalek::PublicKey;
 
-use crate::types;
+use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 
-///
+use crate::types::{self, Connection};
+
+pub fn generate_node_url(
+    version: u16,
+    addresshash: AddressHash,
+    public_key: PublicKey,
+    interfaces: Vec<Connection>,
+) -> String {
+    let encoded_public_key = URL_SAFE_NO_PAD.encode(public_key);
+    let interfaces = interfaces
+        .iter()
+        .map(|c| c.to_string())
+        .collect::<Vec<String>>()
+        .join(",");
+    format!("rns://N/{version}{addresshash}{encoded_public_key}/{interfaces}/")
+}
+
 /// The router that handles routing between nodes on the local network. May be connected to other nodes.
 /// Node config
 /// destination config for the config broadcast
 pub async fn start_router(
-    settings: types::NodeSettings,
-    config_destination: types::DestinationConfig,
+    node_settings: types::NodeSettings,
+    destination_settings: types::DestinationConfig,
 ) {
     log::info!("Starting Reticlum Router");
+
     // This should generally be OsRng unless there is some good reason to keep using the same identity.
-    let private_id = match settings.private_identity {
+    let private_id = match node_settings.private_identity {
         types::PrivateIdentity::Rand => PrivateIdentity::new_from_rand(OsRng),
         types::PrivateIdentity::FromString(s) => PrivateIdentity::new_from_name(&s),
         types::PrivateIdentity::FromHexString(s) => PrivateIdentity::new_from_hex_string(&s)
@@ -33,28 +52,30 @@ pub async fn start_router(
     // rebroadcast set to false
     let mut transport = Transport::new(TransportConfig::new("router", &private_id, true));
 
-    let local_connection = match settings.local_connection {
+    let local_connection = match node_settings.local_connection {
         #[allow(unreachable_patterns)]
         Some(c) => match c {
-            types::Connection::NormalInternet((ip, port)) => {
-                format!("{ip}:{port}")
+            types::Connection::Udp { host, port } => {
+                format!("{host}:{port}")
             }
             _ => todo!(),
         },
         None => format!("0.0.0.0:4243"),
     };
 
-    let remote_connection = match settings.remote_connection {
+    let remote_connection = match node_settings.remote_connection {
         #[allow(unreachable_patterns)]
         Some(c) => match c {
-            types::Connection::NormalInternet((ip, port)) => Some(format!("{ip}:{port}")),
+            types::Connection::Udp { host, port } => Some(&format!("{host}:{port}")),
             _ => todo!(),
         },
         None => None,
     };
 
     let address_hash = transport.iface_manager().lock().await.spawn(
-        UdpInterface::new("0.0.0.0:4243", Some("127.0.0.1:4242")),
+        // setting the second addr to none will cause the children to remain alive after
+        // the parent dies, might be connected to the select!() macro call
+        UdpInterface::new(&local_connection, remote_connection),
         UdpInterface::spawn,
     );
     log::info!("Node address is: {}", address_hash);
@@ -63,20 +84,27 @@ pub async fn start_router(
     let destination = transport
         .add_destination(
             private_id.clone(),
-            // DestinationName::new(
-            //     &config_destination.app_name,          // ~= endpoint
-            //     &config_destination.application_space, // ~= virtual network
-            // ),
-            DestinationName::new("test-server", "app.1"),
+            DestinationName::new(
+                &destination_settings.app_name,          // ~= endpoint
+                &destination_settings.application_space, // ~= virtual network
+            ),
+            // DestinationName::new("test-server", "app.1"),
         )
         .await;
+    {
+        // these should be the same if the destination was generated using the same private identity
+        // let public_key = destination.lock().await.identity.as_identity().public_key;
+        let public_key = private_id.as_identity().public_key;
+        let url = generate_node_url(1, address_hash, public_key, vec![]);
+        log::info!("{url}");
+    }
 
     // the destination hash is used for routing
     let destination_hash = destination.lock().await.desc.address_hash;
     log::info!(
         "New destination {} for the application space {} available: {destination_hash}",
-        config_destination.app_name,
-        config_destination.application_space
+        destination_settings.app_name,
+        destination_settings.application_space
     );
     let announce_loop = async || loop {
         log::trace!("SEND ANNOUNCE {}", destination_hash);

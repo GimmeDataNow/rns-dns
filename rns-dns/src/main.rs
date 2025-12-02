@@ -1,6 +1,8 @@
 use clap::{Arg, ArgAction, ArgGroup};
 use colored;
 
+use crate::types::NodeSettings;
+
 mod tui;
 
 mod client;
@@ -82,26 +84,11 @@ async fn main() {
         )
         .get_matches();
 
-    if args.get_flag("experimental") {
+    if args.get_flag("experimental3") {
         server::start_server().await;
     }
     if args.get_flag("experimental2") {
         client::client().await;
-    }
-    if args.get_flag("experimental3") {
-        let router_settings = types::NodeSettings {
-            local_connection: Some(types::Connection::NormalInternet((
-                "127.0.0.1".to_string(),
-                4243,
-            ))),
-            remote_connection: None,
-            private_identity: types::PrivateIdentity::Rand,
-        };
-        let destination_config = types::DestinationConfig {
-            app_name: "test-server".to_owned(),
-            application_space: "app.1".to_owned(),
-        };
-        router::start_router(router_settings, destination_config).await;
     }
     if args.get_flag("cli") {
         log::info!("You have selected cmd mode");
@@ -114,6 +101,22 @@ async fn main() {
         if args.get_flag("router") {
             log::info!("Router is now starting");
             // server::start_server().await;
+            let node_settings = NodeSettings {
+                local_connection: Some(types::Connection::Udp {
+                    host: "0.0.0.0".to_owned(),
+                    port: 4243,
+                }),
+                remote_connection: Some(types::Connection::Udp {
+                    host: "127.0.0.1".to_owned(),
+                    port: 4242,
+                }),
+                private_identity: types::PrivateIdentity::Rand,
+            };
+            let destination_config = types::DestinationConfig {
+                app_name: "test-server".to_owned(),
+                application_space: "app.1".to_owned(),
+            };
+            router::start_router(node_settings, destination_config).await;
         }
     } else {
         log::info!("You have selected visual mode");

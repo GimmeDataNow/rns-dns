@@ -1,4 +1,8 @@
-# Dns server
+# Specification
+
+This file will serve as the specification for the project.
+
+## Dns server
 
 
 message_to_sign = hash("weather.node" + destination + timestamp)
@@ -23,18 +27,26 @@ respond with error codes
 0x06	🧍 Identity mismatch (wrong owner tried to update) // unlikely error. might reduce the index
 0x07	🧱 System error or overload
 
-# entering into a record
+### entering into a record
 1. check if the name/suffix is available and is not reserved
 2. provide the public key form which the destination is computed
 
 
-# verifying a record
+### verifying a record
 1. enter the dns record
 2. request a verification from an authority
 3. obtain the verification
 4. maintain and update the verification
 
-# obtaining a record and connecting to the destination server
+### obtaining a record
+
+TODO
+
+## Connection
+
+Specifies how the server, client, and routers connect and communicate with each other.
+
+### connecting to the destination server
 
 - A routing node is required.
 - This routing node does not need to be connected to any virtual network/aplication namespace.
@@ -44,6 +56,23 @@ respond with error codes
 - this config would indicate what destinations there are on the local network and what destination to connect to for dns requests
 - the routing node and the routing destination would be provided via qr-code (qr2term) or similar
 - additional services on any device would require either env vars or a local file with the necessary dns info
+
+## qr-code
+- The qr-code for node adresses will be as follows
+
+rns://TYPE-(N)/VERSION/ADDRESSHASH/PUBLIC_KEY/INTERFACE, INTERFACE2/
+
+rns://TYPE-(D)/VERSION/ADDRESSHASH/PUBLIC_KEY/INTERFACE, INTERFACE2/
+
+
+  1. node (N) or destination (D)
+for N:
+  1: 1
+  2: "tcp://example.com:4242",
+  3: h'a3f04b9ab1dcd443e892de11b03cbb32',
+  4: b64(public_key),
+for D:
+
 
 improvements:
 

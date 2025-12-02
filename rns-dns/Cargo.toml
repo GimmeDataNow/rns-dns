@@ -27,3 +27,5 @@ ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
 log = { version = "0.1.0", path = "../log" }
 ansi-to-tui = "7.0.0"
 cli-clipboard = "0.4.0"
+qr2term = "0.3.3"
+base64 = "0.22.1"

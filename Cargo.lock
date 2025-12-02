@@ -1423,6 +1423,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "qr2term"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6867c60b38e9747a079a19614dbb5981a53f21b9a56c265f3bfdf6011a50a957"
+dependencies = [
+ "crossterm",
+ "qrcode",
+]
+
+[[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
+
+[[package]]
 name = "quote"
 version = "1.0.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1568,12 +1584,14 @@ name = "rns-dns"
 version = "0.1.0"
 dependencies = [
  "ansi-to-tui",
+ "base64",
  "chrono",
  "clap",
  "cli-clipboard",
  "colored",
  "ed25519-dalek",
  "log 0.1.0",
+ "qr2term",
  "rand",
  "rand_chacha",
  "rand_core",

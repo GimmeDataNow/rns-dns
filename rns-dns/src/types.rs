@@ -12,8 +12,48 @@ use x25519_dalek::PublicKey;
 
 pub const RECORD_EXPIRY: chrono::TimeDelta = chrono::Duration::days(365);
 
+// pub enum Connection {
+// NormalInternet((String, u16)),
+// }
+
+#[derive(Debug, Clone)]
 pub enum Connection {
-    NormalInternet((String, u16)),
+    Tcp {
+        host: String,
+        port: u16,
+    },
+    Udp {
+        host: String,
+        port: u16,
+    },
+    // For LoRa/Serial add:
+    Serial {
+        path: String,
+        baud: u32,
+    },
+    LoRa {
+        freq: u32,
+        bw: u32,
+        sf: u8,
+        tx_power: u8,
+    },
+    // You can add Tor/I2P/RNode/etc later
+}
+impl ToString for Connection {
+    fn to_string(&self) -> String {
+        match &self {
+            Self::Tcp { host, port } => format!("TCP;{host}:{port}"),
+            Self::Udp { host, port } => format!("Udp;{host}:{port}"),
+            Self::Serial { path, baud } => format!("Serial;{path}:{baud}"),
+            Self::LoRa {
+                freq,
+                bw,
+                sf,
+                tx_power,
+            } => format!("LoRa;{freq}:{bw}:{sf}:{tx_power}"),
+            _ => todo!(),
+        }
+    }
 }
 
 pub enum PrivateIdentity {
@@ -31,6 +71,7 @@ pub struct DestinationConfig {
     pub application_space: String,
 }
 
+/// TODO: change the local+remote connection combo to some umbrella type and accept a vec of connections
 pub struct NodeSettings {
     /// what ip to bind to on the local device
     pub local_connection: Option<Connection>,
