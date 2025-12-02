@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 
 # tui colored
+chrono = "0.4.41"
 colored = "3.0.0"
 
 # interface

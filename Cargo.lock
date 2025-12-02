@@ -1568,6 +1568,7 @@ name = "rns-dns"
 version = "0.1.0"
 dependencies = [
  "ansi-to-tui",
+ "chrono",
  "clap",
  "cli-clipboard",
  "colored",

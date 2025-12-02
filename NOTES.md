@@ -34,6 +34,16 @@ respond with error codes
 3. obtain the verification
 4. maintain and update the verification
 
+# obtaining a record and connecting to the destination server
+
+- A routing node is required.
+- This routing node does not need to be connected to any virtual network/aplication namespace.
+- The server needs to announce its presence to the routing node.
+- The client does not need to announce its presence.
+- The routing node might need to host a web server that broadcasts a cofig for the local network.
+- this config would indicate what destinations there are on the local network and what destination to connect to for dns requests
+- the routing node and the routing destination would be provided via qr-code (qr2term) or similar
+- additional services on any device would require either env vars or a local file with the necessary dns info
 
 improvements:
 

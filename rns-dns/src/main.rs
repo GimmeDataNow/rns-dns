@@ -4,7 +4,9 @@ use colored;
 mod tui;
 
 mod client;
+mod router;
 mod server;
+mod types;
 
 #[tokio::main]
 async fn main() {
@@ -66,6 +68,13 @@ async fn main() {
                 .help("experimental feature")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new("experimental3")
+                .short('3')
+                .long("experimental3")
+                .help("experimental feature")
+                .action(ArgAction::SetTrue),
+        )
         .group(
             ArgGroup::new("router or dns")
                 .args(["router", "dns"])
@@ -78,6 +87,21 @@ async fn main() {
     }
     if args.get_flag("experimental2") {
         client::client().await;
+    }
+    if args.get_flag("experimental3") {
+        let router_settings = types::NodeSettings {
+            local_connection: Some(types::Connection::NormalInternet((
+                "127.0.0.1".to_string(),
+                4243,
+            ))),
+            remote_connection: None,
+            private_identity: types::PrivateIdentity::Rand,
+        };
+        let destination_config = types::DestinationConfig {
+            app_name: "test-server".to_owned(),
+            application_space: "app.1".to_owned(),
+        };
+        router::start_router(router_settings, destination_config).await;
     }
     if args.get_flag("cli") {
         log::info!("You have selected cmd mode");

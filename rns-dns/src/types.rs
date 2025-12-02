@@ -1,15 +1,54 @@
 use std::collections::HashMap;
+use std::default;
 
 use chrono::DateTime;
 use chrono::Utc;
 
+use ed25519_dalek::Signature;
 use reticulum::destination::Destination;
 use reticulum::hash::AddressHash;
 use reticulum::identity::Identity;
-use ed25519_dalek::Signature;
 use x25519_dalek::PublicKey;
 
 pub const RECORD_EXPIRY: chrono::TimeDelta = chrono::Duration::days(365);
+
+pub enum Connection {
+    NormalInternet((String, u16)),
+}
+
+pub enum PrivateIdentity {
+    FromString(String),
+    FromHexString(String),
+    Rand,
+}
+impl Default for PrivateIdentity {
+    fn default() -> Self {
+        Self::Rand
+    }
+}
+pub struct DestinationConfig {
+    pub app_name: String,
+    pub application_space: String,
+}
+
+pub struct NodeSettings {
+    /// what ip to bind to on the local device
+    pub local_connection: Option<Connection>,
+    /// what ip/url to bind to on the remote
+    pub remote_connection: Option<Connection>,
+    /// used for keeping the same addr/destination in case that is wanted
+    pub private_identity: PrivateIdentity,
+}
+
+impl NodeSettings {
+    pub fn new(local: Connection, remote: Option<Connection>, identity: PrivateIdentity) -> Self {
+        Self {
+            local_connection: Some(local),
+            remote_connection: remote,
+            private_identity: identity,
+        }
+    }
+}
 
 /// This is a single dns entry. It serves to provide the destination, public key and
 /// validity of an entry.
@@ -46,7 +85,7 @@ pub const RECORD_EXPIRY: chrono::TimeDelta = chrono::Duration::days(365);
 ///
 /// The entry relies on the 'submitter' (the node that request to be placed into the
 /// dns records) to validate and provide a public signature that is derived from the
-/// private key and the contents that will be signed. 
+/// private key and the contents that will be signed.
 #[allow(dead_code)]
 #[derive(Clone)]
 pub struct DnsEntry {
@@ -64,7 +103,7 @@ pub struct DnsEntry {
     /// The signature to validate the record.
     signature: Signature,
     /// The list of verifiers that have vouched for this node.
-    /// 
+    ///
     /// This should be sorted by the server according to trust levels.
     verifications: Vec<VerifierSigning>,
 }
@@ -75,10 +114,14 @@ impl Default for DnsEntry {
         Self {
             name: "example.com".into(),
             destinations: vec![],
-            public_key: String::default(),
+            // public_key: String::default(),
+            public_key: todo!(),
+
             timestamp: now,
             expiry: now + RECORD_EXPIRY,
-            signature: String::default(),
+            // signature: String::default(),
+            signature: todo!(),
+
             verifications: vec![],
         }
     }
@@ -98,7 +141,7 @@ impl DnsEntry {
 /// This is the the signing of a verifier. It contains minimal information. Should
 /// more Information be required then a look-up using the `destination` is to be
 /// made.
-/// 
+///
 /// # Fields
 /// `destination` - The 'id' of the verifier and the callback destination for
 /// revalidation.
@@ -111,7 +154,7 @@ impl DnsEntry {
 /// destination and cache the results in a long term database. The contents of this
 /// cache are unlikely to change often and not repeatedly sending this data will
 /// greatly reduce the data being sent.
-/// 
+///
 /// # Security
 ///
 /// The only important security note to make is that the signature is derived from
@@ -128,16 +171,15 @@ pub struct VerifierSigning {
     signature: Signature, // sig(dnsentry.sig(), verifier.destination)
 }
 
-
 /// This is a representation of a verification authority, a so called `verifier`.
-/// 
+///
 /// # Fields
 /// `name` - The human readable name of the verifying authority.
 /// `destination` - The destination of the verifying authority and the callback
 /// endpoint for dns entry modifications.
 /// `trust_level` - The trust level of the verifying authority.
 /// `public_key` - The public key which is used for signatue validation.
-/// 
+///
 /// # Reasoning
 ///
 /// This struct contains detailed data about the verifying authority and it provides
@@ -147,7 +189,7 @@ pub struct VerifierSigning {
 /// reduce amount of the data that needs to be transfered. This data is long lived
 /// in nature and this data should be cached for long periods of time and thus this
 /// data should live seperately to the rest of the dns data.
-/// 
+///
 /// Verifiers are selected by the dns server and each of them posses a trust level.
 /// These trust levels are non unique numbers where `0` represents the absolute
 /// highest level of trust that a dns server can issue and this level is reserved
@@ -156,8 +198,8 @@ pub struct VerifierSigning {
 /// akin to the level of risk that that node may pose.
 ///
 /// The (human-readable) name should be available for those that wish to research
-/// more about the verifying authority. 
-/// 
+/// more about the verifying authority.
+///
 /// # Security
 ///
 /// Only the dns server should have the ability to modify these records and NOT the
@@ -165,10 +207,10 @@ pub struct VerifierSigning {
 /// could cause cascading consequences if improperly handled.
 #[allow(dead_code)]
 pub struct Verifier {
-    /// The human-readable name of the verifier 
+    /// The human-readable name of the verifier
     name: String,
     /// The destination of the verifier and the callback destination for dns
-    /// modifications. 
+    /// modifications.
     destination: AddressHash,
     /// The trust level of the verifier. `0` represents the highest level.
     trust_level: u32,
@@ -176,13 +218,12 @@ pub struct Verifier {
     public_key: PublicKey,
 }
 
-
 pub enum RNSDNSERRORS {
-    AlreadyExists
+    AlreadyExists,
 }
 
 /// This is the DnsDatabase.
-/// 
+///
 /// # Fields
 /// `entries` - This is the forward index which maps from the String to the DnsEntry
 /// `reverse_index` - This is the reverse index which maps from the Destination to
@@ -207,7 +248,6 @@ pub struct DnsEntryStore {
 }
 
 impl DnsEntryStore {
-
     /// Adds an entry to the `DnsEntryStore`.
     ///
     /// # Behaviour
@@ -223,14 +263,13 @@ impl DnsEntryStore {
     ///
     /// Should this record already exist in the forward index then this function will
     /// return `RNSDNSERRORS::AlreadyExists`.
-     pub fn add_entry(
+    pub fn add_entry(
         &mut self,
         name: &String,
         destination: &AddressHash,
         public_key: &PublicKey,
         signature: Signature,
     ) -> Result<(), RNSDNSERRORS> {
-
         //
         if self.forward_index.contains_key(name) {
             return Err(RNSDNSERRORS::AlreadyExists);
@@ -244,17 +283,20 @@ impl DnsEntryStore {
 
         let now = Utc::now();
 
-        // error if this domain name already exists 
+        // error if this domain name already exists
 
-        let _ = self.forward_index.insert(name.clone(), DnsEntry {
-            name: name.clone(),
-            destinations: vec![*destination],
-            public_key: public_key.clone(),
-            timestamp: now,
-            expiry: now + RECORD_EXPIRY,
-            signature,
-            verifications: Vec::default(),
-        });
+        let _ = self.forward_index.insert(
+            name.clone(),
+            DnsEntry {
+                name: name.clone(),
+                destinations: vec![*destination],
+                public_key: public_key.clone(),
+                timestamp: now,
+                expiry: now + RECORD_EXPIRY,
+                signature,
+                verifications: Vec::default(),
+            },
+        );
 
         Ok(())
     }
@@ -297,7 +339,7 @@ impl DnsEntryStore {
     }
 
     /// Completely rebuilds the entire reverse index
-    /// 
+    ///
     pub fn rebuild_reverse_index(&mut self) {
         // delete all previous records
         self.reverse_index = HashMap::default();
@@ -333,7 +375,12 @@ pub struct VerificationStore {
 
 #[allow(unused_variables)]
 impl VerificationStore {
-    pub fn add_verification(&mut self, name: String, destination: AddressHash, signature: VerifierSigning) -> Result<(), RNSDNSERRORS> {
+    pub fn add_verification(
+        &mut self,
+        name: String,
+        destination: AddressHash,
+        signature: VerifierSigning,
+    ) -> Result<(), RNSDNSERRORS> {
         // TODO: verify the actual signature before doing anything
         // maybe call on verify_verifier_signature()
         todo!()
@@ -345,13 +392,17 @@ impl VerificationStore {
     pub fn get_domains_by_verifier(&self, verifier: Verifier) -> Vec<&DnsEntry> {
         // will require additional args
         // this might be really hard to keep clean
-        
+
         todo!()
     }
     pub fn count_verifications(&self, name: String, destination: AddressHash) -> u32 {
         todo!()
     }
-    pub fn get_verifications_for_domain(&self, name: String, destination: AddressHash) -> Result<&Vec<VerifierSigning>, RNSDNSERRORS> {
+    pub fn get_verifications_for_domain(
+        &self,
+        name: String,
+        destination: AddressHash,
+    ) -> Result<&Vec<VerifierSigning>, RNSDNSERRORS> {
         todo!()
     }
 }
@@ -379,14 +430,10 @@ impl VerifierRegistry {
     }
 }
 
-
 #[derive(Default)]
 pub struct DnsDatabase {
     entry_store: DnsEntryStore,
     verification_store: VerificationStore,
     verifier_registry: VerifierRegistry,
 }
-impl DnsDatabase {
-
-}
-
+impl DnsDatabase {}

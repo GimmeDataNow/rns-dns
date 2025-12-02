@@ -275,17 +275,25 @@ pub async fn tui() -> Result<(), Box<dyn std::error::Error>> {
 
     // List of processes
     let mut processes: Vec<ProcessLog> = vec![
+        // ProcessLog {
+        // name: "server".to_string(),
+        // command: "cargo run -- -c --experimental".to_owned(),
+        // logs: VecDeque::with_capacity(10000),
+        // scroll: 0,
+        // tail: true,
+        // filter: None,
+        // },
         ProcessLog {
-            name: "server".to_string(),
-            command: "cargo run -- -c --experimental".to_owned(),
+            name: "client".to_string(),
+            command: "cargo run -- -c --experimental2".to_owned(),
             logs: VecDeque::with_capacity(10000),
             scroll: 0,
             tail: true,
             filter: None,
         },
         ProcessLog {
-            name: "client".to_string(),
-            command: "cargo run -- -c --experimental2".to_owned(),
+            name: "router".to_string(),
+            command: "cargo run -- -c --experimental3".to_owned(),
             logs: VecDeque::with_capacity(10000),
             scroll: 0,
             tail: true,
