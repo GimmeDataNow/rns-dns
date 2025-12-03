@@ -96,6 +96,11 @@ pub async fn start_router(
         // let public_key = destination.lock().await.identity.as_identity().public_key;
         let public_key = private_id.as_identity().public_key;
         let url = generate_node_url(1, address_hash, public_key, vec![]);
+        let qr = qr2term::generate_qr_string(&url).unwrap();
+        let qr_split = qr.split("\n");
+        for n in qr_split {
+            log::info!("{n}");
+        }
         log::info!("{url}");
     }
 

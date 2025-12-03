@@ -91,12 +91,11 @@ async fn main() {
         client::client().await;
     }
     if args.get_flag("cli") {
-        log::info!("You have selected cmd mode");
-        let options: Vec<_> = args
-            .get_many::<String>("options")
-            .map(|vals| vals.cloned().collect())
-            .unwrap_or_default();
-        log::trace!("-o is set to : <{}>", options.concat());
+        // let options: Vec<_> = args
+        //     .get_many::<String>("options")
+        //     .map(|vals| vals.cloned().collect())
+        //     .unwrap_or_default();
+        // log::trace!("-o is set to : <{}>", options.concat());
 
         if args.get_flag("router") {
             log::info!("Router is now starting");
