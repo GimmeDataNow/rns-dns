@@ -1,16 +1,11 @@
 use reticulum::iface::tcp_server::TcpServer;
-// use env_logger;
-// use log;
 use tokio::time;
 
 use reticulum::destination::link::LinkEvent;
-use reticulum::identity::PrivateIdentity;
 use reticulum::iface::udp::UdpInterface;
 use reticulum::{destination::DestinationName, hash::AddressHash};
 //use reticulum::iface::tcp_server::TcpServer;
-use rand_core::OsRng;
 use reticulum::transport::{Transport, TransportConfig};
-use x25519_dalek::PublicKey;
 
 use crate::types::{self, Connection};
 
