@@ -18,14 +18,14 @@ This dns system is made for systems with extremely long ttl entries since the de
 
 respond with error codes
 
-0x00	✅ Success (name found)
-0x01	❌ NXDOMAIN (name not found)
-0x02	🔒 Not authorized (unauthorized update)
-0x03	🕒 Expired (record known, but expired)
-0x04	🧾 Invalid signature
-0x05	🚫 Verification required (name exists but not trusted)
-0x06	🧍 Identity mismatch (wrong owner tried to update) // unlikely error. might reduce the index
-0x07	🧱 System error or overload
+- 0x00	✅ Success (name found)
+- 0x01	❌ NXDOMAIN (name not found)
+- 0x02	🔒 Not authorized (unauthorized update)
+- 0x03	🕒 Expired (record known, but expired)
+- 0x04	🧾 Invalid signature
+- 0x05	🚫 Verification required (name exists but not trusted)
+- 0x06	🧍 Identity mismatch (wrong owner tried to update) // unlikely error. might reduce the index
+- 0x07	🧱 System error or overload
 
 ### entering into a record
 1. check if the name/suffix is available and is not reserved
@@ -62,32 +62,35 @@ Specifies how the server, client, and routers connect and communicate with each 
 
 rns://TYPE-(N)/VERSION/PUBLIC_KEY/(ADDRESS_HASH, INTERFACE) (ADDRESS_HASH2, INTERFACE2)//
 
->! potential issues may be due to the way the interfaces store information (":" as a seperator).
-This might cause issues for easy parsing for rns:// or for storing more than one rns:// url in one string.
+> [!WARNING]
+> potential issues may be due to the way the interfaces store information (":" as a seperator).
+> This might cause issues for easy parsing for rns:// or for storing more than one rns:// url in one string.
 
 
 rns://TYPE-(D)/VERSION/DESTINATION_NAME/APPLICATION_SPACE/ADDRESS_HASH,ADDRESS_HASH2//
->! this will require sanitization of the destination name and application space because otherwise someone
-might inject malicious inputs
+> [!WARNING]
+> this will require sanitization of the destination name and application space because otherwise someone
+> might inject malicious inputs
 
 >it might be possible to reduce the number of hashes provided if there is some kind of reverse-look-up functionality for the public key.
 Although this is probably a bad idea 
 
+node (N) or destination (D)
 
-  1. node (N) or destination (D)
 for N:
-  VERSION: 1
-  PUBLIC_KEY: WrgqoHGP4OjB3iAUylURkWQzyLqJuQ52GDEDD4ofa3w
-  ADDRESS_HASH: 7c9fa136d4413fa6173637e883b6998d
-  INTERFACE: Udp;0.0.0.0:4243:127.0.0.1:4242
+  - VERSION: 1
+  - PUBLIC_KEY: WrgqoHGP4OjB3iAUylURkWQzyLqJuQ52GDEDD4ofa3w
+  - ADDRESS_HASH: 7c9fa136d4413fa6173637e883b6998d
+  - INTERFACE: Udp;0.0.0.0:4243:127.0.0.1:4242
+
 for D:
-  VERSION: 1
-  DESTINATION_NAME: test-server
-  APPLICATION_SPACE: app.1
-  ADDRESSHASH: 7c9fa136d4413fa6173637e883b6998d
+  - VERSION: 1
+  - DESTINATION_NAME: test-server
+  - APPLICATION_SPACE: app.1
+  - ADDRESSHASH: 7c9fa136d4413fa6173637e883b6998d
 
 
-improvements:
+## Improvements:
 
 Fix the way public keys currently work
 
