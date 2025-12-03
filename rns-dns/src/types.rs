@@ -5,26 +5,27 @@ use chrono::DateTime;
 use chrono::Utc;
 
 use ed25519_dalek::Signature;
+use rand_core::OsRng;
 use reticulum::destination::Destination;
 use reticulum::hash::AddressHash;
 use reticulum::identity::Identity;
 use x25519_dalek::PublicKey;
 
-pub const RECORD_EXPIRY: chrono::TimeDelta = chrono::Duration::days(365);
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 
-// pub enum Connection {
-// NormalInternet((String, u16)),
-// }
+pub const RECORD_EXPIRY: chrono::TimeDelta = chrono::Duration::days(365);
 
 #[derive(Debug, Clone)]
 pub enum Connection {
     Tcp {
-        host: String,
-        port: u16,
+        local_host: String,
+        local_port: u16,
     },
     Udp {
-        host: String,
-        port: u16,
+        local_host: String,
+        local_port: u16,
+        remote_host: String,
+        remote_port: u16,
     },
     // For LoRa/Serial add:
     Serial {
@@ -42,8 +43,16 @@ pub enum Connection {
 impl ToString for Connection {
     fn to_string(&self) -> String {
         match &self {
-            Self::Tcp { host, port } => format!("TCP;{host}:{port}"),
-            Self::Udp { host, port } => format!("Udp;{host}:{port}"),
+            Self::Tcp {
+                local_host,
+                local_port,
+            } => format!("Tcp;{local_host}:{local_port}"),
+            Self::Udp {
+                local_host,
+                local_port,
+                remote_host,
+                remote_port,
+            } => format!("Udp;{local_host}:{local_port}:{remote_host}:{remote_port}"),
             Self::Serial { path, baud } => format!("Serial;{path}:{baud}"),
             Self::LoRa {
                 freq,
@@ -52,6 +61,28 @@ impl ToString for Connection {
                 tx_power,
             } => format!("LoRa;{freq}:{bw}:{sf}:{tx_power}"),
             _ => todo!(),
+        }
+    }
+}
+
+impl Connection {
+    pub fn new_tcp(local_host: String, local_port: u16) -> Self {
+        Self::Tcp {
+            local_host,
+            local_port,
+        }
+    }
+    pub fn new_udp(
+        local_host: String,
+        local_port: u16,
+        remote_host: String,
+        remote_port: u16,
+    ) -> Self {
+        Self::Udp {
+            local_host,
+            local_port,
+            remote_host,
+            remote_port,
         }
     }
 }
@@ -66,29 +97,74 @@ impl Default for PrivateIdentity {
         Self::Rand
     }
 }
+
+impl PrivateIdentity {
+    pub fn extract(&self) -> reticulum::identity::PrivateIdentity {
+        match &self {
+            PrivateIdentity::Rand => reticulum::identity::PrivateIdentity::new_from_rand(OsRng),
+            PrivateIdentity::FromString(s) => {
+                reticulum::identity::PrivateIdentity::new_from_name(&s)
+            }
+            PrivateIdentity::FromHexString(s) => {
+                reticulum::identity::PrivateIdentity::new_from_hex_string(&s)
+                    .expect("failed to convert hex string to private identity")
+            }
+        }
+    }
+}
+
 pub struct DestinationConfig {
     pub app_name: String,
     pub application_space: String,
 }
 
-/// TODO: change the local+remote connection combo to some umbrella type and accept a vec of connections
+impl DestinationConfig {
+    pub fn new(app_name: String, application_space: String) -> Self {
+        Self {
+            app_name,
+            application_space,
+        }
+    }
+}
+
 pub struct NodeSettings {
-    /// what ip to bind to on the local device
-    pub local_connection: Option<Connection>,
-    /// what ip/url to bind to on the remote
-    pub remote_connection: Option<Connection>,
-    /// used for keeping the same addr/destination in case that is wanted
+    pub interfaces: Vec<Connection>,
     pub private_identity: PrivateIdentity,
 }
 
 impl NodeSettings {
-    pub fn new(local: Connection, remote: Option<Connection>, identity: PrivateIdentity) -> Self {
+    pub fn new(interfaces: Vec<Connection>, private_identity: PrivateIdentity) -> Self {
         Self {
-            local_connection: Some(local),
-            remote_connection: remote,
-            private_identity: identity,
+            interfaces,
+            private_identity,
         }
     }
+}
+
+pub fn generate_node_url(
+    version: u16,
+    address_hash: Vec<AddressHash>,
+    public_key: PublicKey,
+    interfaces: &Vec<Connection>,
+) -> String {
+    let encoded_public_key = URL_SAFE_NO_PAD.encode(public_key);
+    let interfaces = interfaces
+        .iter()
+        .map(|c| c.to_string())
+        .collect::<Vec<String>>();
+    let address_hash = address_hash
+        .iter()
+        .map(|c| c.to_string())
+        .collect::<Vec<String>>();
+    let zip = address_hash
+        .iter()
+        .zip(interfaces.iter())
+        .map(|(hash, interface)| format!("({hash} {interface})"))
+        .collect::<Vec<String>>()
+        .join(",");
+    log::info!("{}", zip.len());
+
+    format!("rns://N/{version}/{encoded_public_key}/{zip}//")
 }
 
 /// This is a single dns entry. It serves to provide the destination, public key and

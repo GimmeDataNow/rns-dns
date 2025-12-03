@@ -1,4 +1,4 @@
-use base64::Engine;
+use reticulum::iface::tcp_server::TcpServer;
 // use env_logger;
 // use log;
 use tokio::time;
@@ -12,73 +12,72 @@ use rand_core::OsRng;
 use reticulum::transport::{Transport, TransportConfig};
 use x25519_dalek::PublicKey;
 
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-
 use crate::types::{self, Connection};
 
-pub fn generate_node_url(
-    version: u16,
-    addresshash: AddressHash,
-    public_key: PublicKey,
-    interfaces: Vec<Connection>,
-) -> String {
-    let encoded_public_key = URL_SAFE_NO_PAD.encode(public_key);
-    let interfaces = interfaces
-        .iter()
-        .map(|c| c.to_string())
-        .collect::<Vec<String>>()
-        .join(",");
-    format!("rns://N/{version}{addresshash}{encoded_public_key}/{interfaces}/")
-}
-
 /// The router that handles routing between nodes on the local network. May be connected to other nodes.
-/// Node config
-/// destination config for the config broadcast
 pub async fn start_router(
     node_settings: types::NodeSettings,
     destination_settings: types::DestinationConfig,
 ) {
     log::info!("Starting Reticlum Router");
 
-    // This should generally be OsRng unless there is some good reason to keep using the same identity.
-    let private_id = match node_settings.private_identity {
-        types::PrivateIdentity::Rand => PrivateIdentity::new_from_rand(OsRng),
-        types::PrivateIdentity::FromString(s) => PrivateIdentity::new_from_name(&s),
-        types::PrivateIdentity::FromHexString(s) => PrivateIdentity::new_from_hex_string(&s)
-            .expect("failed to convert hex string to private identity"),
-    };
+    let private_id = node_settings.private_identity.extract();
 
     // the label "router" is entirely cosmetic and does not affect the functionality in any way.
-    // rebroadcast set to false
     let mut transport = Transport::new(TransportConfig::new("router", &private_id, true));
 
-    let local_connection = match node_settings.local_connection {
-        #[allow(unreachable_patterns)]
-        Some(c) => match c {
-            types::Connection::Udp { host, port } => {
-                format!("{host}:{port}")
+    let mut address_hash: AddressHash = AddressHash::new_empty();
+    let mut address_hashes: Vec<AddressHash> = Vec::new();
+
+    // add each interface to the node
+    for i in &node_settings.interfaces {
+        match i {
+            Connection::Tcp {
+                local_host,
+                local_port,
+            } => {
+                address_hash = transport.iface_manager().lock().await.spawn(
+                    TcpServer::new(
+                        &format!("{local_host}:{local_port}"),
+                        transport.iface_manager(),
+                    ),
+                    TcpServer::spawn,
+                );
+                address_hashes.push(address_hash);
+            }
+            Connection::Udp {
+                local_host,
+                local_port,
+                remote_host,
+                remote_port,
+            } => {
+                address_hash = transport.iface_manager().lock().await.spawn(
+                    UdpInterface::new(
+                        format!("{local_host}:{local_port}"),
+                        Some(format!("{remote_host}:{remote_port}")),
+                    ),
+                    UdpInterface::spawn,
+                );
+                address_hashes.push(address_hash);
             }
             _ => todo!(),
-        },
-        None => format!("0.0.0.0:4243"),
-    };
+        };
+        log::info!("Node address is: {}", address_hash);
+    }
 
-    let remote_connection = match node_settings.remote_connection {
-        #[allow(unreachable_patterns)]
-        Some(c) => match c {
-            types::Connection::Udp { host, port } => Some(&format!("{host}:{port}")),
-            _ => todo!(),
-        },
-        None => None,
-    };
-
-    let address_hash = transport.iface_manager().lock().await.spawn(
-        // setting the second addr to none will cause the children to remain alive after
-        // the parent dies, might be connected to the select!() macro call
-        UdpInterface::new(&local_connection, remote_connection),
-        UdpInterface::spawn,
-    );
-    log::info!("Node address is: {}", address_hash);
+    {
+        // these should be the same if the destination was generated using the same private identity
+        // let public_key = destination.lock().await.identity.as_identity().public_key;
+        let public_key = private_id.as_identity().public_key;
+        let url =
+            types::generate_node_url(1, address_hashes, public_key, &node_settings.interfaces);
+        let qr = qr2term::generate_qr_string(&url).unwrap();
+        let qr_split = qr.split("\n");
+        for n in qr_split {
+            log::info!("{n}");
+        }
+        log::info!("{url}");
+    }
 
     // only if the destinations match will the link work
     let destination = transport
@@ -88,21 +87,8 @@ pub async fn start_router(
                 &destination_settings.app_name,          // ~= endpoint
                 &destination_settings.application_space, // ~= virtual network
             ),
-            // DestinationName::new("test-server", "app.1"),
         )
         .await;
-    {
-        // these should be the same if the destination was generated using the same private identity
-        // let public_key = destination.lock().await.identity.as_identity().public_key;
-        let public_key = private_id.as_identity().public_key;
-        let url = generate_node_url(1, address_hash, public_key, vec![]);
-        let qr = qr2term::generate_qr_string(&url).unwrap();
-        let qr_split = qr.split("\n");
-        for n in qr_split {
-            log::info!("{n}");
-        }
-        log::info!("{url}");
-    }
 
     // the destination hash is used for routing
     let destination_hash = destination.lock().await.desc.address_hash;
@@ -111,11 +97,13 @@ pub async fn start_router(
         destination_settings.app_name,
         destination_settings.application_space
     );
+
     let announce_loop = async || loop {
         log::trace!("SEND ANNOUNCE {}", destination_hash);
         transport.send_announce(&destination, None).await;
         time::sleep(time::Duration::from_secs(2)).await;
     };
+
     let in_event_loop = async || {
         let mut next_ping = 0;
         let mut missed_pings = vec![];

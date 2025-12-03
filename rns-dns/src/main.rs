@@ -1,7 +1,7 @@
 use clap::{Arg, ArgAction, ArgGroup};
 use colored;
 
-use crate::types::NodeSettings;
+use crate::types::{Connection, NodeSettings};
 
 mod tui;
 
@@ -99,22 +99,16 @@ async fn main() {
 
         if args.get_flag("router") {
             log::info!("Router is now starting");
-            // server::start_server().await;
-            let node_settings = NodeSettings {
-                local_connection: Some(types::Connection::Udp {
-                    host: "0.0.0.0".to_owned(),
-                    port: 4243,
-                }),
-                remote_connection: Some(types::Connection::Udp {
-                    host: "127.0.0.1".to_owned(),
-                    port: 4242,
-                }),
-                private_identity: types::PrivateIdentity::Rand,
+            let udp = Connection::Udp {
+                local_host: "0.0.0.0".to_string(),
+                local_port: 4243,
+                remote_host: "127.0.0.1".to_string(),
+                remote_port: 4242,
             };
-            let destination_config = types::DestinationConfig {
-                app_name: "test-server".to_owned(),
-                application_space: "app.1".to_owned(),
-            };
+            let tcp = Connection::new_tcp("0.0.0.0".to_string(), 53317);
+            let node_settings = NodeSettings::new(vec![udp, tcp], types::PrivateIdentity::Rand);
+            let destination_config =
+                types::DestinationConfig::new("test-server".to_owned(), "app.1".to_owned());
             router::start_router(node_settings, destination_config).await;
         }
     } else {
