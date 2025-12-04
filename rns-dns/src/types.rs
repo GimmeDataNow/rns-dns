@@ -142,9 +142,9 @@ impl NodeSettings {
 }
 
 pub fn generate_node_url(
-    version: u16,
-    address_hash: Vec<AddressHash>,
-    public_key: PublicKey,
+    version: &u16,
+    address_hash: &Vec<AddressHash>,
+    public_key: &PublicKey,
     interfaces: &Vec<Connection>,
 ) -> String {
     let encoded_public_key = URL_SAFE_NO_PAD.encode(public_key);
@@ -162,9 +162,27 @@ pub fn generate_node_url(
         .map(|(hash, interface)| format!("({hash} {interface})"))
         .collect::<Vec<String>>()
         .join(",");
-    log::info!("{}", zip.len());
 
     format!("rns://N/{version}/{encoded_public_key}/{zip}//")
+}
+
+pub fn generate_destination_url(
+    version: &u16,
+    destination_name: &str,
+    application_space: &str,
+    address_hash: &Vec<AddressHash>,
+) -> String {
+    let encoded_destination_name = URL_SAFE_NO_PAD.encode(destination_name);
+    let encoded_application_name = URL_SAFE_NO_PAD.encode(application_space);
+    let address_hash = address_hash
+        .iter()
+        .map(|c| c.to_string())
+        .collect::<Vec<String>>()
+        .join(",");
+
+    format!(
+        "rns://D/{version}/{encoded_destination_name}/{encoded_application_name}/{address_hash}//"
+    )
 }
 
 /// This is a single dns entry. It serves to provide the destination, public key and

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use reticulum::iface::tcp_client::TcpClient;
 use tokio::sync::{self, Mutex};
 use tokio::time;
 
@@ -8,40 +9,69 @@ use reticulum::destination::{DestinationName, SingleInputDestination};
 use reticulum::identity::PrivateIdentity;
 use reticulum::iface::udp::UdpInterface;
 //use reticulum::iface::tcp_client::TcpClient;
+use reticulum::hash::AddressHash;
 use reticulum::transport::{Transport, TransportConfig};
 
-pub async fn client() {
+use crate::types;
+
+pub async fn client(
+    node_settings: types::NodeSettings,
+    destination_settings: types::DestinationConfig,
+) {
     log::info!("Reticulum test client");
-    let private_id = PrivateIdentity::new_from_name("test-client");
-    let _destination = {
-        let destination = SingleInputDestination::new(
-            private_id.clone(),
-            DestinationName::new("test-server", "app.1"),
-        );
-        log::info!("DESTINATION: {}", destination.desc.address_hash);
-        std::sync::Arc::new(sync::Mutex::new(destination))
-    };
-    let transport = Transport::new(TransportConfig::new("client", &private_id, true));
-    let address_hash = transport.iface_manager().lock().await.spawn(
-        UdpInterface::new("0.0.0.0:4242", Some("127.0.0.1:4243")),
-        UdpInterface::spawn,
-    );
+    let private_id = node_settings.private_identity.extract();
+    let transport = Transport::new(TransportConfig::new("client", &private_id, false));
+
+    let mut address_hash: AddressHash = AddressHash::new_empty();
+    let mut address_hashes: Vec<AddressHash> = Vec::new();
+
+    for i in &node_settings.interfaces {
+        match i {
+            types::Connection::Tcp {
+                local_host,
+                local_port,
+            } => {
+                address_hash = transport.iface_manager().lock().await.spawn(
+                    TcpClient::new(&format!("{local_host}:{local_port}")),
+                    TcpClient::spawn,
+                );
+                address_hashes.push(address_hash);
+            }
+            types::Connection::Udp {
+                local_host,
+                local_port,
+                remote_host,
+                remote_port,
+            } => {
+                address_hash = transport.iface_manager().lock().await.spawn(
+                    UdpInterface::new(
+                        format!("{local_host}:{local_port}"),
+                        Some(format!("{remote_host}:{remote_port}")),
+                    ),
+                    UdpInterface::spawn,
+                );
+                address_hashes.push(address_hash);
+            }
+            _ => todo!(),
+        };
+        log::info!("New Node address registered: {}", address_hash);
+    }
+
     /*
     let address_hash = transport.iface_manager().lock().await.spawn (
       TcpClient::new ("127.0.0.1:4242"), TcpClient::spawn);
     */
-    log::info!("ADDRESS: {}", address_hash);
     let pings = Arc::new(Mutex::new(vec![]));
     let mut announce_recv = transport.recv_announces().await;
     let current_link: Arc<Mutex<Option<Arc<Mutex<Link>>>>> = Arc::new(Mutex::new(None));
     let mut link_loop = async || {
         while let Ok(announce) = announce_recv.recv().await {
             let destination = announce.destination.lock().await;
-            log::info!("GOT ANNOUNCE: {}", destination.desc.address_hash);
+            log::trace!("GOT ANNOUNCE: {}", destination.desc.address_hash);
             let mut current_link = current_link.lock().await;
             if current_link.is_none() {
                 let link = transport.link(destination.desc).await;
-                log::info!("SET LINK: {}", link.lock().await.id());
+                log::trace!("SET LINK: {}", link.lock().await.id());
                 *current_link = Some(link.clone());
             }
             drop(current_link);
@@ -54,21 +84,23 @@ pub async fn client() {
                 Ok(link_event) => match link_event.event {
                     LinkEvent::Data(payload) => {
                         let payload = str::from_utf8(payload.as_slice()).unwrap();
-                        log::info!(
-                            "OUT LINK PAYLOAD {} ({}): {}",
-                            link_event.address_hash,
-                            link_event.id,
-                            payload
-                        );
-                        if &payload[0..4] == "pong" {
-                            let n = (&payload[5..]).parse::<u64>().unwrap();
-                            let mut pings = pings.lock().await;
-                            let index = pings.iter().position(|x| *x == n).unwrap();
-                            pings.remove(index);
-                            log::info!("UNACKED PINGS: {pings:?}");
-                        } else {
-                            unreachable!()
-                        }
+                        log::trace!("{}", payload);
+                        // log::trace!(
+                        //     "OUT LINK PAYLOAD {} ({}): {}",
+                        //     link_event.address_hash,
+                        //     link_event.id,
+                        //     payload
+                        // );
+                        // if &payload[0..4] == "pong" {
+                        //     let n = (&payload[5..]).parse::<u64>().unwrap();
+                        //     let mut pings = pings.lock().await;
+                        //     let index = pings.iter().position(|x| *x == n).unwrap();
+                        //     pings.remove(index);
+                        //     log::trace!("UNACKED PINGS: {pings:?}");
+                        // } else {
+                        //     log::error!("unreachable code");
+                        //     // unreachable!()
+                        // }
                     }
                     LinkEvent::Activated => {
                         log::info!(
@@ -133,17 +165,17 @@ pub async fn client() {
         let mut counter = 0;
         loop {
             if let Some(current_link) = current_link.lock().await.as_mut() {
-                if counter == 5 {
-                    let mut link = current_link.lock().await;
-                    log::info!("CLOSING LINK");
-                    link.close();
-                    let destination = link.destination().clone();
-                    drop(link);
-                    let link = transport.link(destination).await;
-                    log::info!("NEW LINK: {}", link.lock().await.id());
-                    *current_link = link;
-                }
-                log::info!("SEND PING {counter}");
+                // if counter == 5 {
+                //     let mut link = current_link.lock().await;
+                //     log::info!("CLOSING LINK");
+                //     link.close();
+                //     let destination = link.destination().clone();
+                //     drop(link);
+                //     let link = transport.link(destination).await;
+                //     log::info!("NEW LINK: {}", link.lock().await.id());
+                //     *current_link = link;
+                // }
+                log::trace!("SEND PING {counter}");
                 pings.lock().await.push(counter);
                 let link = current_link.lock().await;
                 let packet = link

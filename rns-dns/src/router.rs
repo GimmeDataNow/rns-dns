@@ -57,7 +57,7 @@ pub async fn start_router(
             }
             _ => todo!(),
         };
-        log::info!("Node address is: {}", address_hash);
+        log::info!("New Node address registered: {}", address_hash);
     }
 
     {
@@ -65,13 +65,32 @@ pub async fn start_router(
         // let public_key = destination.lock().await.identity.as_identity().public_key;
         let public_key = private_id.as_identity().public_key;
         let url =
-            types::generate_node_url(1, address_hashes, public_key, &node_settings.interfaces);
+            types::generate_node_url(&1, &address_hashes, &public_key, &node_settings.interfaces);
         let qr = qr2term::generate_qr_string(&url).unwrap();
-        let qr_split = qr.split("\n");
+        let mut qr_split: Vec<&str> = qr.split("\n").collect();
+        qr_split.pop();
+        log::info!("{url}");
         for n in qr_split {
             log::info!("{n}");
         }
+    }
+
+    {
+        // these should be the same if the destination was generated using the same private identity
+        // let public_key = destination.lock().await.identity.as_identity().public_key;
+        let url = types::generate_destination_url(
+            &1,
+            &destination_settings.app_name,
+            &destination_settings.application_space,
+            &address_hashes,
+        );
+        let qr = qr2term::generate_qr_string(&url).unwrap();
+        let mut qr_split: Vec<&str> = qr.split("\n").collect();
+        qr_split.pop();
         log::info!("{url}");
+        for n in qr_split {
+            log::info!("{n}");
+        }
     }
 
     // only if the destinations match will the link work
@@ -100,8 +119,6 @@ pub async fn start_router(
     };
 
     let in_event_loop = async || {
-        let mut next_ping = 0;
-        let mut missed_pings = vec![];
         let mut in_link_events = transport.in_link_events();
         while let Ok(link_event) = in_link_events.recv().await {
             match link_event.event {
@@ -113,25 +130,19 @@ pub async fn start_router(
                         link_event.id,
                         payload
                     );
-                    log::trace!("MISSED PINGS: {:?}", missed_pings);
-                    if &payload[0..4] == "ping" {
-                        let n = (&payload[5..]).parse::<u64>().unwrap();
-                        if n != next_ping {
-                            while next_ping < n {
-                                missed_pings.push(next_ping);
-                                next_ping += 1;
-                            }
-                        }
-                        next_ping = n + 1;
-                        let link_id = link_event.id;
-                        let link = transport.find_in_link(&link_id).await.unwrap();
-                        let link = link.lock().await;
-                        let pong = link.data_packet(format!("pong {n}").as_bytes()).unwrap();
-                        drop(link);
-                        transport.send_packet(pong).await;
-                    } else {
-                        unreachable!()
-                    }
+
+                    // link
+                    let link_id = link_event.id;
+                    let link = transport.find_in_link(&link_id).await.unwrap();
+                    let link = link.lock().await;
+
+                    // response
+                    let pong = link
+                        .data_packet(format!("server-response").as_bytes())
+                        .unwrap();
+                    drop(link);
+                    // send
+                    transport.send_packet(pong).await;
                 }
                 LinkEvent::Activated => {
                     log::trace!(

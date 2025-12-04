@@ -33,11 +33,21 @@ async fn main() {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("client")
+                .short('t')
+                .long("client")
+                .help("Starts a test client")
+                .requires("cli")
+                .conflicts_with("router")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new("router")
                 .short('r')
                 .long("router")
                 .help("Starts a reticulum network instance which routes trafic for the device")
                 .requires("cli")
+                .conflicts_with("client")
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -84,21 +94,36 @@ async fn main() {
         )
         .get_matches();
 
-    if args.get_flag("experimental3") {
-        server::start_server().await;
-    }
-    if args.get_flag("experimental2") {
-        client::client().await;
-    }
+    // if args.get_flag("experimental3") {
+    //     server::start_server().await;
+    // }
+    // if args.get_flag("experimental2") {
+    //     client::client().await;
+    // }
     if args.get_flag("cli") {
         // let options: Vec<_> = args
         //     .get_many::<String>("options")
         //     .map(|vals| vals.cloned().collect())
         //     .unwrap_or_default();
         // log::trace!("-o is set to : <{}>", options.concat());
+        if args.get_flag("client") {
+            let udp = Connection::Udp {
+                local_host: "0.0.0.0".to_string(),
+                local_port: 4242,
+                remote_host: "127.0.0.1".to_string(),
+                remote_port: 4243,
+            };
+            let tcp = Connection::new_tcp("127.0.0.1".to_string(), 53317);
+            let node_settings = NodeSettings::new(
+                vec![tcp],
+                types::PrivateIdentity::FromString("client-test".to_owned()),
+            );
+            let destination_config =
+                types::DestinationConfig::new("node.config".to_owned(), "infra".to_owned());
+            client::client(node_settings, destination_config).await;
+        }
 
         if args.get_flag("router") {
-            log::info!("Router is now starting");
             let udp = Connection::Udp {
                 local_host: "0.0.0.0".to_string(),
                 local_port: 4243,
@@ -106,9 +131,12 @@ async fn main() {
                 remote_port: 4242,
             };
             let tcp = Connection::new_tcp("0.0.0.0".to_string(), 53317);
-            let node_settings = NodeSettings::new(vec![udp, tcp], types::PrivateIdentity::Rand);
+            let node_settings = NodeSettings::new(
+                vec![udp, tcp],
+                types::PrivateIdentity::FromString("router-test".to_owned()),
+            );
             let destination_config =
-                types::DestinationConfig::new("test-server".to_owned(), "app.1".to_owned());
+                types::DestinationConfig::new("node.config".to_owned(), "infra".to_owned());
             router::start_router(node_settings, destination_config).await;
         }
     } else {

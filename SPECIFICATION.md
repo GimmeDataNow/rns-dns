@@ -60,33 +60,37 @@ Specifies how the server, client, and routers connect and communicate with each 
 ## qr-code
 - The qr-code for node adresses will be as follows
 
-rns://TYPE-(N)/VERSION/PUBLIC_KEY/(ADDRESS_HASH, INTERFACE) (ADDRESS_HASH2, INTERFACE2)//
+rns://TYPE-(N)/VERSION/PUBLIC_KEY/(ADDRESS_HASH INTERFACE) (ADDRESS_HASH2 INTERFACE2)//
 
 > [!WARNING]
 > potential issues may be due to the way the interfaces store information (":" as a seperator).
 > This might cause issues for easy parsing for rns:// or for storing more than one rns:// url in one string.
+> Maybe add verification signature (?)
+> Maybe add an append protocol for when the qr-code length exeeds a limit
 
 
 rns://TYPE-(D)/VERSION/DESTINATION_NAME/APPLICATION_SPACE/ADDRESS_HASH,ADDRESS_HASH2//
 > [!WARNING]
 > this will require sanitization of the destination name and application space because otherwise someone
-> might inject malicious inputs
+> might inject malicious inputs. Base64?
 
 >it might be possible to reduce the number of hashes provided if there is some kind of reverse-look-up functionality for the public key.
 Although this is probably a bad idea 
+> Maybe add verification signature (?)
+> Maybe add an append protocol for when the qr-code length exeeds a limit (less likely)
 
 node (N) or destination (D)
 
-for N:
+for N: (Node)
   - VERSION: 1
   - PUBLIC_KEY: WrgqoHGP4OjB3iAUylURkWQzyLqJuQ52GDEDD4ofa3w
   - ADDRESS_HASH: 7c9fa136d4413fa6173637e883b6998d
   - INTERFACE: Udp;0.0.0.0:4243:127.0.0.1:4242
 
-for D:
+for D: (Dns) (?)
   - VERSION: 1
-  - DESTINATION_NAME: test-server
-  - APPLICATION_SPACE: app.1
+  - DESTINATION_NAME: node.config (Base64-url-safe-no-padding)
+  - APPLICATION_SPACE: infra (Base64-url-safe-no-padding)
   - ADDRESSHASH: 7c9fa136d4413fa6173637e883b6998d
 
 

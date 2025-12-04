@@ -75,6 +75,19 @@ struct ProcessLog {
     filter: Option<String>,
 }
 
+impl Default for ProcessLog {
+    fn default() -> Self {
+        Self {
+            name: "default name".to_owned(),
+            command: "echo 'Default Command'".to_owned(),
+            logs: VecDeque::with_capacity(10000),
+            scroll: 0,
+            tail: true,
+            filter: None,
+        }
+    }
+}
+
 /// Strip simple ANSI SGR sequences `\x1b[...m` so filtering/search works on raw text.
 /// made by chatgpt
 #[allow(dead_code)]
@@ -275,38 +288,16 @@ pub async fn tui() -> Result<(), Box<dyn std::error::Error>> {
 
     // List of processes
     let mut processes: Vec<ProcessLog> = vec![
-        // ProcessLog {
-        // name: "server".to_string(),
-        // command: "cargo run -- -c --experimental".to_owned(),
-        // logs: VecDeque::with_capacity(1000),
-        // scroll: 0,
-        // tail: true,
-        // filter: None,
-        // },
-        ProcessLog {
-            name: "client".to_string(),
-            command: "cargo run -- -c --experimental2".to_owned(),
-            logs: VecDeque::with_capacity(10000),
-            scroll: 0,
-            tail: true,
-            filter: None,
-        },
         ProcessLog {
             name: "router".to_string(),
             command: "cargo run -- -c -r".to_owned(),
-            logs: VecDeque::with_capacity(10000),
-            scroll: 0,
-            tail: true,
-            filter: None,
+            ..Default::default()
         },
-        // ProcessLog {
-        //     name: "ping loop".to_string(),
-        //     command: "ping 127.0.0.1".to_owned(),
-        //     logs: VecDeque::with_capacity(1000),
-        //     scroll: 0,
-        //     tail: true,
-        //     filter: None,
-        // },
+        ProcessLog {
+            name: "client".to_string(),
+            command: "cargo run -- -c --client".to_owned(),
+            ..Default::default()
+        },
     ];
 
     // Per-process view state

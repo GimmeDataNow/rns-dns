@@ -25,7 +25,7 @@ pub async fn start_server() {
             // destination name.
             // The first argument is repersentative of an endpoint.
             // The second argument is the application space/virtual network the destination is part of.
-            DestinationName::new("test-server", "app.1"),
+            DestinationName::new("rns-dns", "infra"),
         )
         .await;
     // the destination hash is used for routing
