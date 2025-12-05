@@ -56,11 +56,6 @@ pub async fn client(
         };
         log::info!("New Node address registered: {}", address_hash);
     }
-
-    /*
-    let address_hash = transport.iface_manager().lock().await.spawn (
-      TcpClient::new ("127.0.0.1:4242"), TcpClient::spawn);
-    */
     let pings = Arc::new(Mutex::new(vec![]));
     let mut announce_recv = transport.recv_announces().await;
     let current_link: Arc<Mutex<Option<Arc<Mutex<Link>>>>> = Arc::new(Mutex::new(None));
@@ -125,6 +120,7 @@ pub async fn client(
         }
         log::info!("OUT LINK LOOP EXIT");
     };
+    // a in-loop is only active if the link is established by the other party
     let in_event_loop = async || {
         let mut in_link_events = transport.in_link_events();
         loop {
@@ -161,6 +157,7 @@ pub async fn client(
         }
         log::info!("IN LINK LOOP EXIT");
     };
+    // send a packet
     let ping_loop = async || {
         let mut counter = 0;
         loop {
