@@ -1,24 +1,25 @@
 # Reticulum DNS Protocol Specification
-**Version:** 0.1
-**Last Updated:** 2024-XX-XX
-**Status:** Draft (Experimental)
 
 ### **Abstract**
 This document defines a **decentralized, encrypted DNS protocol** for the Reticulum network. It replaces traditional DNS with a **signed, queryable system** for resolving node destinations (e.g., `rns://weather.node`) while ensuring **privacy, integrity, and scalability**.
 
+### **Status**
+**Version:** 0.1
+
+**Status:** Draft (Experimental)
+
+
 ### **Scope**
 - **Not covered**:
-  - Physical network layers (e.g., TCP/UDP).
   - Higher-level application protocols (e.g., Reticulum messaging).
 - **Out of scope**:
-  - Caching strategies (left to implementers).
-  - Reverse DNS lookups (future work).
+
 
 ### **Key Goals**
-- [x] **Security**: End-to-end encrypted queries/answers.
-- [x] **Decentralization**: No single authority (unlike traditional DNS).
-- [x] **Scalability**: Efficient resolution for large networks.
-- [x] **Interoperability**: Works with Reticulum’s RNS URL scheme.
+- [x] **Security**: End-to-end encrypted queries/answers, optional signing of messages.
+- [x] **Semi decentralised**: DNS provider may choose one or more Authorites to fetch dns records from.
+- [x] **Flexible**: Customization should be relatively easy without trying to hack and patch the underlying protocol.
+- [x] **Simple**: The End user shouldn't have to worry too much about the underlying mechanisms.
 
 ## **Core Concepts**
 
@@ -26,10 +27,11 @@ This document defines a **decentralized, encrypted DNS protocol** for the Reticu
 | Term                   | Definition                                                                  |
 |------------------------|-----------------------------------------------------------------------------|
 | **Node**               | A participant in the Reticulum network (e.g., `rns://weather.node`).        |
-| **Destination**        | A cryptographic proof that an answer is authentic (using Ed25519).          |
-| **Query**              | A DNS request (e.g., resolving `weather.node` to an Destination/key pair).  |
+| **Destination**        | An endpoint inside of the application space / virtual network.              |
+| **Application Space**  | A virtual network which isolates the applications to prevent clutter.       |
+| **Query**              | A DNS request                                                               |
 | **Answer**             | A signed response containing node metadata (Destination, public key, TTL).  |
-| **Routing Node**       | A node that relays queries (acts like a decentralized nameserver).          |
+| **Routing Node**       | A node that relays queries.                                                 |
 | **TTL (Time-to-Live)** | How long an answer is considered valid (e.g., 1 hour).                      |
 | **Signature**          | A cryptographic proof that an answer is authentic (using Ed25519).          |
 
@@ -37,6 +39,7 @@ This document defines a **decentralized, encrypted DNS protocol** for the Reticu
 - Format: `rns://TYPE/VERSION/...`
   - Example: `rns://D/VERSION/weather/InternetOfThings/7c9fa136d4413fa6173637e883b6998d`
 - **Types**:
+  - `(N)`: Generic node information.
   - `(D)`: Destination node.
   - `(R)`: Routing node (future).
 
