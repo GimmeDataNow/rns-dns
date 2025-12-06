@@ -37,7 +37,7 @@ This document defines a **decentralized, encrypted DNS protocol** for the Reticu
 
 ### **RNS URL Scheme**
 - Format: `rns://TYPE/VERSION/...`
-  - Example: `rns://D/VERSION/weather/InternetOfThings/7c9fa136d4413fa6173637e883b6998d`
+  - Example: `rns://D/VERSION/weather/InternetOfThings/7c9fa136d4413fa6173637e883b6998d//`
 - **Types**:
   - `(N)`: Generic node information.
   - `(D)`: Destination node.
@@ -45,17 +45,17 @@ This document defines a **decentralized, encrypted DNS protocol** for the Reticu
 
 ## **Protocol Design**
 
-### **Packet Structure**
+### **Packet Structure (Query)**
 All messages are **binary-encoded** (not text-based like traditional DNS).
 
-| Field          | Type       | Size (bytes) | Description                                  |
-|----------------|------------|--------------|----------------------------------------------|
-| `magic`        | `u32`      | 4            | `0x52455449` (ASCII "RETI") for identification. |
-| `version`      | `u8`       | 1            | Protocol version (e.g., `1`).                |
-| `packet_type`  | `u8`       | 1            | `0` = Query, `1` = Answer.                   |
-| `id`           | `u16`      | 2            | Client-chosen request ID (for matching answers). |
-| `payload`      | `str`      | Variable     | Query: `rns://weather.node`. Answer: Signed node data. |
-| `signature`    | `vec<u8>`  | Variable     | Ed25519 signature over `payload`.            |
+| Field          | Type       | Size (bytes) | Description                                     |
+|----------------|------------|--------------|-------------------------------------------------|
+| `id`           | `u16`      | 2            | Client-chosen request ID (for matching answers).|
+| `answers`      | `u4`       | .5           | Number of answers per question.                 |
+| `authority`    | `u4`       | .5           | Number of authorities per question.             |
+| `level`        | `(u8, u8)` | 2            | Define which authorities should be included.    |
+| `flags`        | `u8`       | 1            | Additional Flags.                               |
+| `questions`    | `Vec<u8>`  | variable     | Domains (seperated by a limiter)                |
 
 ### **Example Query Packet**
 TODO
