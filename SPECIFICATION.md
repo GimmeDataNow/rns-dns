@@ -63,12 +63,12 @@ TODO
 ## **Security**
 
 ### **Threat Model**
-| Threat               | Mitigation                                  |
-|----------------------|---------------------------------------------|
-| **Spoofing**         | Ed25519 signatures ensure answers are authentic. |
+| Threat               | Mitigation                                             |
+|----------------------|--------------------------------------------------------|
+| **Spoofing**         | Ed25519 signatures ensure answers are authentic.       |
 | **Eavesdropping**    | Queries/answers are encrypted (TLS or Reticulum E2EE). |
-| **Denial-of-Service**| Rate limiting at routing nodes.            |
-| **Cache Poisoning**  | Short TTLs (e.g., 1 hour) and signature validation. |
+| **Denial-of-Service**| Rate limiting at routing nodes.                        |
+| **Cache Poisoning**  | ?                                                      |
 
 ### **Cryptography**
 - **Signatures**: Ed25519 (RFC 8032) for compact, fast signatures.
@@ -77,20 +77,23 @@ TODO
 
 ### **Privacy**
 - **No Logging**: Routing nodes should not log queries (like Tor).
-- **Anonymity**: Use Reticulum’s E2EE for query payloads if needed.
+- **Anonymity**: Use Reticulum’s E2EE for query payloads.
 
----
 ## **Implementation Details**
 
+TODO
+
 ## **Open Questions**
-- How to handle **reverse DNS** (e.g., resolving an IP back to a name)?
-- Should we support **wildcard records** (e.g., `*.node`)?
+- How to handle **reverse DNS** (e.g., resolving a destination back to a name)?
+- Should it support **wildcard records** (e.g., `*.node`)?
 - How to **scale routing nodes** in large networks?
+- How to deal with Cache Poisoning?
 
 ## **Future Work**
 - [ ] Add **DNSSEC-like validation** for trust chains.
-- [ ] Implement **recursive resolution** (like traditional DNS).
-- [ ] Benchmark performance vs. traditional DNS.
+- [ ] Implement **recursive resolution** (A DNS server should be able to sync from another server).
+- [ ] Benchmark performance vs. traditional DNS (it will be much slower but it would be nice to see).
 
 ## Appendix
 ### References
+[Reticulum Network](https://reticulum.network/)
