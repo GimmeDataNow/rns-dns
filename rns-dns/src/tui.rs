@@ -270,6 +270,10 @@ fn copy_logs_to_clipboard(
 }
 
 pub async fn tui() -> Result<(), Box<dyn std::error::Error>> {
+    // let url = "rns://D/1/bm9kZS5jb25maWc/aW5mcmE//7c9fa136d4413fa6173637e883b6998d/,/d86e8112f3c4c4442126f8e9f44f1686///";
+    // let (_, parsed) = crate::server::parser::parse_rns_url(url).unwrap();
+    // log::warn!("{:#?}", parsed);
+
     // allow for copy
     // Terminal setup
     let mut ctx = ClipboardContext::new().unwrap();
@@ -288,14 +292,19 @@ pub async fn tui() -> Result<(), Box<dyn std::error::Error>> {
 
     // List of processes
     let mut processes: Vec<ProcessLog> = vec![
-        ProcessLog {
-            name: "router".to_string(),
-            command: "cargo run -- -c -r".to_owned(),
-            ..Default::default()
-        },
+        // ProcessLog {
+        // name: "router".to_string(),
+        // command: "cargo run -- -c -r".to_owned(),
+        // ..Default::default()
+        // },
         ProcessLog {
             name: "client".to_string(),
             command: "cargo run -- -c --client".to_owned(),
+            ..Default::default()
+        },
+        ProcessLog {
+            name: "dns-server".to_string(),
+            command: "cargo run -- -c -d".to_owned(),
             ..Default::default()
         },
     ];

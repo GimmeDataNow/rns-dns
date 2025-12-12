@@ -3,6 +3,9 @@
 ---
 ## backend
 
+parser:
+return the '/' for the addresshashes
+
 client:
 current_link.lock().await.as_mut() is causing the process to stall if one of the links fails.
 It will try to build links on all interfaces. This will make the programm stall.

@@ -9,6 +9,7 @@ mod client;
 mod router;
 mod server;
 mod types;
+mod utilites;
 
 #[tokio::main]
 async fn main() {
@@ -138,6 +139,23 @@ async fn main() {
             let destination_config =
                 types::DestinationConfig::new("node.config".to_owned(), "infra".to_owned());
             router::start_router(node_settings, destination_config).await;
+        }
+
+        if args.get_flag("dns") {
+            let udp = Connection::Udp {
+                local_host: "0.0.0.0".to_string(),
+                local_port: 4243,
+                remote_host: "127.0.0.1".to_string(),
+                remote_port: 4242,
+            };
+            let tcp = Connection::new_tcp("0.0.0.0".to_string(), 53317);
+            let node_settings = NodeSettings::new(
+                vec![udp, tcp],
+                types::PrivateIdentity::FromString("router-test".to_owned()),
+            );
+            let destination_config =
+                types::DestinationConfig::new("node.config".to_owned(), "infra".to_owned());
+            server::node::start_server(node_settings, destination_config).await;
         }
     } else {
         log::info!("You have selected visual mode");
