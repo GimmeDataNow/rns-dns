@@ -57,9 +57,30 @@ All messages are **binary-encoded** (not text-based like traditional DNS).
 | `flags`        | `u8`       | 1            | Additional Flags.                               |
 | `questions`    | `Vec<u8>`  | variable     | Domains (seperated by a limiter)                |
 
+## **Domain Names**
+
+RNS-DNS will support various domain name suffixes. You may choose to provide your own suffixes or default to the ones provied by [Public Suffix](https://publicsuffix.org/list/public_suffix_list.dat).
+Extraction of said domain suffixes will be done by [public-suffix](https://crates.io/crates/public-suffix).
+
+### **Wildcard Domains**
 ### domain parsing
 - https://crates.io/crates/public-suffix
 - https://publicsuffix.org/list/public_suffix_list.dat
+
+### **Current Concerns About Specifics**
+
+For wildcard domains it might be necessary for the destination to route and re-sign the data, because the client would receive data from a destination it had previously not linked to.
+This data would not be decipherable by the client thus rendering it useless.
+
+The DNS server would have to handle all non wildcard cases first before falling back to the wildcard domain.
+
+It will be infeasible for every destination to register itself as a sub domain, wildcard domains might be needed.
+
+How would sub domains even be handled?
+Should the wild card domain accept all trafic and attempt to route it?
+Should the higher level domain provide signing for them?
+Would this be recursive?
+how would that fit into the current format?
 
 ### **Example Query Packet**
 TODO
