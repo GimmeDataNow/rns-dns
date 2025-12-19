@@ -57,6 +57,10 @@ All messages are **binary-encoded** (not text-based like traditional DNS).
 | `flags`        | `u8`       | 1            | Additional Flags.                               |
 | `questions`    | `Vec<u8>`  | variable     | Domains (seperated by a limiter)                |
 
+### domain parsing
+- https://crates.io/crates/public-suffix
+- https://publicsuffix.org/list/public_suffix_list.dat
+
 ### **Example Query Packet**
 TODO
 
